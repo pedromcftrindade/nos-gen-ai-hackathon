@@ -10,6 +10,7 @@ from config import (
     MAX_RETRIES,
     READ_TIMEOUT,
 )
+from erros import RespostaInvalida
 
 
 def extrair_texto_resposta(data):
@@ -18,7 +19,7 @@ def extrair_texto_resposta(data):
 
     if not candidatos:
         feedback = data.get("promptFeedback") or {}
-        raise RuntimeError(
+        raise RespostaInvalida(
             f"O Gemini não devolveu candidatos: {feedback or data}"
         )
 
@@ -30,7 +31,7 @@ def extrair_texto_resposta(data):
     ).strip()
 
     if not texto:
-        raise RuntimeError(
+        raise RespostaInvalida(
             "O Gemini devolveu uma resposta sem texto."
         )
 
@@ -117,7 +118,7 @@ def pedir_gemini(session, api_key, prompt):
         try:
             data = resposta.json()
         except ValueError as erro:
-            raise RuntimeError(
+            raise RespostaInvalida(
                 "A API devolveu uma resposta que não é JSON válido."
             ) from erro
 

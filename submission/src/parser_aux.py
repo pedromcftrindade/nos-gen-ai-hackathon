@@ -3,6 +3,7 @@ import json
 import re
 
 from config import MAX_CHARS
+from erros import RespostaInvalida
 
 # Pontuação que nunca faz parte do valor (+, -, @, /, %, € ficam).
 PONT_SEP = ".,;:!?()[]{}\"'«»“”‘’…"
@@ -78,7 +79,7 @@ def converter_resposta_em_lista(resposta):
         inicio = texto.find("[")
 
         if inicio == -1:
-            raise RuntimeError(
+            raise RespostaInvalida(
                 f"A resposta do Gemini não contém um array JSON válido: "
                 f"{resposta[:500]}"
             )
@@ -86,13 +87,13 @@ def converter_resposta_em_lista(resposta):
         try:
             dados, _ = json.JSONDecoder().raw_decode(texto[inicio:])
         except json.JSONDecodeError as erro:
-            raise RuntimeError(
+            raise RespostaInvalida(
                 f"Não foi possível interpretar a resposta JSON: "
                 f"{resposta[:500]}"
             ) from erro
 
     if not isinstance(dados, list):
-        raise RuntimeError("A resposta do Gemini não é uma lista JSON.")
+        raise RespostaInvalida("A resposta do Gemini não é uma lista JSON.")
 
     pares = []
     ignorados = 0

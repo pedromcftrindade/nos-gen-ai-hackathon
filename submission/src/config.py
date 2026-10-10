@@ -16,7 +16,7 @@ SENSITIVE_INFO_FILE = SUBMISSION_DIR / "sensitive_info.json"
 
 LIMIAR_LINHA_CHEIA = 0.75  # linha >= 75% da largura => a frase continua
 
-MAX_CHARS = 2000
+MAX_CHARS = 4000
 
 MODEL = "gemini-3.5-flash-lite"
 
@@ -30,6 +30,10 @@ CONNECT_TIMEOUT = 10
 READ_TIMEOUT = 120
 
 HTTP_RETRY_CODES = {429, 500, 502, 503, 504}
+
+# Resposta inutilizável (JSON inválido, vazia, ids errados): voltar a pedir.
+MAX_TENTATIVAS_RESPOSTA = 3
+LIMITE_DESCARTADOS = 0.5   # > 50% dos pares sem a palavra no id => repetir
 
 
 PROMPT_TEMPLATE = """

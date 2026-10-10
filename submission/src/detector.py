@@ -7,11 +7,14 @@ import requests
 
 from api_call import pedir_gemini
 from config import (
+    LIMITE_DESCARTADOS,
+    MAX_TENTATIVAS_RESPOSTA,
     PROMPT_TEMPLATE,
     RESPONSES_FILE,
     SENSITIVE_INFO_FILE,
     SUBMISSION_DIR,
 )
+from erros import RespostaInvalida
 from parser_aux import (
     converter_resposta_em_lista,
     dividir_em_blocos,
@@ -43,6 +46,67 @@ def carregar_sensivel():
             SENSITIVE_INFO_FILE.read_text(encoding="utf-8")
         )
     ]
+
+
+def _analisar_parte(session, api_key, prompt, tokens, i, n):
+    """
+    Pede ao Gemini uma parte e valida a resposta. Se a resposta for
+    inutilizável (vazia, JSON inválido, ou a maioria das palavras não
+    está no id indicado), volta a pedir, até MAX_TENTATIVAS_RESPOSTA.
+
+    Devolve (resposta, válidos, corrigidos, descartados). Se todas as
+    tentativas forem más mas alguma tiver dado resultados, usa a melhor.
+    """
+    melhor = None
+    ultimo_erro = None
+
+    for tentativa in range(1, MAX_TENTATIVAS_RESPOSTA + 1):
+        try:
+            resposta = pedir_gemini(session, api_key, prompt)
+            pares = converter_resposta_em_lista(resposta)
+
+        except RespostaInvalida as erro:
+            ultimo_erro = erro
+            print(
+                f"Parte {i}/{n}: resposta inválida do Gemini "
+                f"(tentativa {tentativa}/{MAX_TENTATIVAS_RESPOSTA}): "
+                f"{str(erro)[:200]}",
+                flush=True,
+            )
+            continue
+
+        validos, corrigidos, descartados = validar_pares(pares, tokens)
+        total = len(validos) + len(descartados)
+
+        candidata = (resposta, validos, corrigidos, descartados)
+
+        if melhor is None or len(validos) > len(melhor[1]):
+            melhor = candidata
+
+        if total and len(descartados) / total > LIMITE_DESCARTADOS:
+            print(
+                f"Parte {i}/{n}: {len(descartados)}/{total} pares com ids "
+                f"errados (tentativa {tentativa}/{MAX_TENTATIVAS_RESPOSTA})"
+                f". A voltar a pedir...",
+                flush=True,
+            )
+            continue
+
+        return candidata
+
+    if melhor is None:
+        raise RespostaInvalida(
+            f"Parte {i}/{n}: o Gemini não deu uma resposta válida após "
+            f"{MAX_TENTATIVAS_RESPOSTA} tentativas: {ultimo_erro}"
+        )
+
+    print(
+        f"Aviso: parte {i}/{n}: nenhuma tentativa foi boa; "
+        f"a usar a melhor ({len(melhor[1])} palavra(s) válida(s)).",
+        flush=True,
+    )
+
+    return melhor
 
 
 def processar_com_gemini(texto):
@@ -85,13 +149,12 @@ def processar_com_gemini(texto):
             )
 
             inicio = time.monotonic()
-            resposta = pedir_gemini(session, api_key, prompt)
+            resposta, validos, corrigidos, descartados = _analisar_parte(
+                session, api_key, prompt, tokens, i, numero_chunks
+            )
             duracao = time.monotonic() - inicio
 
             respostas.append(resposta)
-
-            pares = converter_resposta_em_lista(resposta)
-            validos, corrigidos, descartados = validar_pares(pares, tokens)
             resultado.update(validos)
 
             if corrigidos:
