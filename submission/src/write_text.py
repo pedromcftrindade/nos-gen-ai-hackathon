@@ -1,3 +1,5 @@
+import string
+
 """
     Creates a flat dictionary from a nested dictionary, filtering by specific attributes.
 
@@ -29,18 +31,46 @@ def createDict(d, fields):
     Returns:
         str: The modified text with the corresponding words replaced by '*'.
     """
+
+Doc= "Ana, Correia."
+W = {"Ana":[1]}
+
 def FinalText(Document, WordsSet):
+    """Substitui ocorrências específicas de palavras num documento por asteriscos (*),
+    ignorando pontuações e vírgulas na contagem dos índices e na correspondência.
+
+    Args:
+        Document (str): O texto completo do documento a ser processado.
+        WordsSet (dict): Dicionário com as palavras e os seus índices válidos.
+
+    Returns:
+        str: O texto modificado com as palavras correspondentes substituídas por '*'.
+    """
+    
     DocSplit = Document.split()
     resultado = []
-    i=1
+    i = 1
 
-    for word in DocSplit:
-        if word in WordsSet and i in WordsSet[word]:
-            resultado.append("*")
+    for token in DocSplit:
+        # Remove pontuações das bordas da palavra (ex: "casa," -> "casa")
+        clean_word = token.strip(string.punctuation)
+        
+        # Se o token for apenas uma pontuação isolada (ex: ",")
+        if not clean_word:
+            resultado.append(token)
+            continue
+
+        # Verifica se a palavra limpa está no dicionário e se o índice coincide
+        if clean_word in WordsSet and i in WordsSet[clean_word]:
+            # Substitui a palavra por '*' mantendo a pontuação original (se houver)
+            replaced_token = token.replace(clean_word, "*", 1)
+            resultado.append(replaced_token)
         else:
-            resultado.append(word)
+            resultado.append(token)
+        
+        # Incrementa o índice apenas quando processamos uma palavra real
         i += 1
             
-    # Junta todos os elementos da lista numa única string, separados por espaços
     return " ".join(resultado)
 
+print(FinalText(Doc, W))
