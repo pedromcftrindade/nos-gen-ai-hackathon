@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -18,10 +19,13 @@ BASE_DIR = Path(__file__).resolve().parent
 
 load_dotenv(BASE_DIR / ".env")
 
-SUBMISSION_DIR = BASE_DIR / "submission"
-SUBMISSION_FILE = SUBMISSION_DIR / "submission.txt"
+SUBMISSION_DIR = BASE_DIR.parent
+SUBMISSION_FILE = SUBMISSION_DIR / "submission.txt"      # resultado FINAL
+EXTRACTED_FILE = SUBMISSION_DIR / "extracted_text.txt"   # texto original
 RESPONSES_FILE = SUBMISSION_DIR / "gemini_responses.txt"
 SENSITIVE_INFO_FILE = SUBMISSION_DIR / "sensitive_info.json"
+
+LIMIAR_LINHA_CHEIA = 0.75  # linha >= 75% da largura => a frase continua
 
 MAX_CHARS = 8000
 
@@ -80,7 +84,7 @@ Document part {i} of {n}:
 # ============================================================
 
 def extrair_texto_pdf(pdf_entrada):
-    """Extrai o texto do PDF e guarda-o em submission.txt."""
+    """Extrai o texto do PDF e guarda-o em extracted_text.txt."""
     caminho_pdf = Path(pdf_entrada).expanduser().resolve()
 
     if not caminho_pdf.is_file():
@@ -107,19 +111,13 @@ def extrair_texto_pdf(pdf_entrada):
 
     SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
-    SUBMISSION_FILE.write_text(
-        texto_completo,
-        encoding="utf-8",
-    )
+    EXTRACTED_FILE.write_text(texto_completo, encoding="utf-8")
 
     print(
         f"Texto extraído: {len(texto_completo)} caracteres.",
         flush=True,
     )
-    print(
-        f"Texto guardado em: {SUBMISSION_FILE}",
-        flush=True,
-    )
+    print(f"Texto guardado em: {EXTRACTED_FILE}", flush=True)
 
     return texto_completo
 
@@ -183,6 +181,7 @@ def extrair_texto_resposta(data):
         )
 
     return texto.replace("\n", "")
+
 
 def pedir_gemini(session, api_key, prompt):
     """Envia um pedido ao Gemini e repete erros temporários."""
@@ -453,7 +452,7 @@ def processar_com_gemini(texto):
 
 
 # ============================================================
-# Substituição das informações sensíveis no PDF
+# Padrão de pesquisa e substituição
 # ============================================================
 
 def criar_padrao(informacoes_sensiveis):
@@ -467,7 +466,7 @@ def criar_padrao(informacoes_sensiveis):
         if not informacao:
             continue
 
-        chave = informacao.casefold()
+        chave = re.sub(r"\s+", " ", informacao).casefold()
 
         if chave not in vistas:
             vistas.add(chave)
@@ -482,7 +481,9 @@ def criar_padrao(informacoes_sensiveis):
     alternativas = []
 
     for informacao in informacoes:
-        alternativa = re.escape(informacao)
+        # Espaços/quebras de linha entre palavras casam com qualquer \s+
+        palavras = informacao.split()
+        alternativa = r"\s+".join(re.escape(p) for p in palavras)
 
         # Evitar, por exemplo, encontrar "Ana" dentro de "Banana".
         if informacao[0].isalnum():
@@ -498,9 +499,142 @@ def criar_padrao(informacoes_sensiveis):
         re.IGNORECASE,
     )
 
+
 def asteriscos(match):
-    """'Maria do Santos' -> '* * *' (um asterisco por palavra)."""
+    """'Maria Clara' -> '* *' (um asterisco por palavra)."""
     return " ".join("*" for _ in match.group().split())
+
+
+# ============================================================
+# Redação do texto (submission.txt)
+# ============================================================
+
+def redigir_paragrafo(linhas, padrao, largura):
+    """
+    Substitui as informações sensíveis e volta a quebrar o parágrafo,
+    a partir da primeira linha alterada, para a largura original.
+    As linhas anteriores não são tocadas.
+    """
+    original = "\n".join(linhas)
+    m = padrao.search(original)
+
+    if m is None:
+        return linhas
+
+    idx = original[:m.start()].count("\n")
+    cabeca = linhas[:idx]
+    cauda = "\n".join(linhas[idx:])
+
+    nova_cauda = padrao.sub(asteriscos, cauda)
+
+    indent_1 = re.match(r"\s*", linhas[idx]).group()
+    indent_n = re.match(
+        r"\s*", linhas[idx + 1] if idx + 1 < len(linhas) else linhas[idx]
+    ).group()
+
+    refeitas = textwrap.wrap(
+        " ".join(nova_cauda.split()),
+        width=largura,
+        initial_indent=indent_1,
+        subsequent_indent=indent_n,
+        break_long_words=False,
+        break_on_hyphens=False,
+    )
+
+    return cabeca + refeitas
+
+
+def redigir_bloco(linhas, padrao):
+    """Divide um bloco de linhas seguidas em parágrafos e redige cada um."""
+    largura = max(len(l.rstrip()) for l in linhas)
+    limiar = largura * LIMIAR_LINHA_CHEIA
+
+    # Linhas cuja quebra cai a meio de uma informação sensível
+    # (ex.: "Maria\nClara") nunca terminam um parágrafo.
+    texto_bloco = "\n".join(linhas)
+    forcadas = set()
+
+    for m in padrao.finditer(texto_bloco):
+        primeira = texto_bloco[:m.start()].count("\n")
+        ultima = texto_bloco[:m.end()].count("\n")
+        forcadas.update(range(primeira, ultima))
+
+    paragrafos = []
+    atual = []
+
+    for i, linha in enumerate(linhas):
+        atual.append(linha)
+
+        if i in forcadas:
+            continue
+
+        curta = len(linha.rstrip()) < limiar
+        fecha_frase = linha.rstrip().endswith((".", "!", "?", ":", ";"))
+
+        # Linha curta ou que fecha uma frase => fim de parágrafo
+        if curta or fecha_frase:
+            paragrafos.append(atual)
+            atual = []
+
+    if atual:
+        paragrafos.append(atual)
+
+    resultado = []
+
+    for par in paragrafos:
+        larg_par = max(len(l.rstrip()) for l in par)
+        resultado.extend(redigir_paragrafo(par, padrao, larg_par))
+
+    return resultado
+
+
+def redigir_texto(texto, padrao):
+    """Devolve o texto com cada palavra sensível trocada por '*'."""
+    if padrao is None:
+        return texto
+
+    saida = []
+    bloco = []
+
+    for linha in texto.splitlines():
+        if linha.strip():
+            bloco.append(linha)
+        else:
+            if bloco:
+                saida.extend(redigir_bloco(bloco, padrao))
+                bloco = []
+            saida.append(linha)
+
+    if bloco:
+        saida.extend(redigir_bloco(bloco, padrao))
+
+    return "\n".join(saida) + "\n"
+
+
+# ============================================================
+# Substituição das informações sensíveis no PDF (opcional)
+# ============================================================
+
+def _fonte(span):
+    """Escolhe a fonte base-14 equivalente (negrito/itálico)."""
+    flags = span.get("flags", 0)
+    bold = bool(flags & 16)
+    italic = bool(flags & 2)
+    if bold and italic:
+        return "hebi"
+    if bold:
+        return "hebo"
+    if italic:
+        return "heit"
+    return "helv"
+
+
+def _cor(cor_int):
+    return (
+        ((cor_int >> 16) & 255) / 255,
+        ((cor_int >> 8) & 255) / 255,
+        (cor_int & 255) / 255,
+    )
 
 
 def substituir_informacoes_sensiveis(
@@ -509,12 +643,11 @@ def substituir_informacoes_sensiveis(
     informacoes_sensiveis,
 ):
     """
-    Substitui cada palavra sensível por '*' e volta a escrever o resto
-    da linha logo a seguir. Se a linha original estava justificada,
-    redistribui os espaços para manter a margem direita.
+    Troca cada palavra sensível por '*' (um asterisco por palavra, com
+    um só espaço entre eles). O resto da linha é redesenhado caractere a
+    caractere, nas posições originais deslocadas para a esquerda, por isso
+    não há espaços a mais nem sobreposições.
     """
-    TOLERANCIA_JUSTIFICADO = 3  # pontos
-
     caminho_entrada = Path(pdf_entrada).expanduser().resolve()
     caminho_saida = Path(pdf_saida).expanduser().resolve()
 
@@ -549,157 +682,125 @@ def substituir_informacoes_sensiveis(
                 flush=True,
             )
 
-            # Cada elemento: (retângulo, [(texto, origem, tamanho, cor)],
-            #                 x1 alvo se justificada, senão None)
-            ocorrencias = []
+            # Cada elemento: (retângulo a apagar, lista de desenhos)
+            # desenho = (texto, x, y, fonte, tamanho, cor)
+            trabalho = []
 
             if padrao is not None:
                 for bloco in pagina.get_text("rawdict")["blocks"]:
-                    linhas = bloco.get("lines", [])
+                    for linha in bloco.get("lines", []):
+                        chars = []
 
-                    if not linhas:
-                        continue
+                        for span in linha["spans"]:
+                            for c in span.get("chars", []):
+                                chars.append((c, span))
 
-                    x1_max_bloco = max(l["bbox"][2] for l in linhas)
-
-                    for idx_linha, linha in enumerate(linhas):
-                        spans = [
-                            s for s in linha["spans"] if s.get("chars")
-                        ]
-
-                        novos_textos = []
-                        primeiro_alterado = None
-
-                        for idx, span in enumerate(spans):
-                            original = "".join(
-                                c["c"] for c in span["chars"]
-                            )
-                            novo = padrao.sub(asteriscos, original)
-                            novos_textos.append(novo)
-
-                            if (
-                                novo != original
-                                and primeiro_alterado is None
-                            ):
-                                primeiro_alterado = idx
-
-                        if primeiro_alterado is None:
+                        if not chars:
                             continue
 
-                        primeiro = spans[primeiro_alterado]
-                        x0 = primeiro["chars"][0]["bbox"][0]
-                        bbox_linha = fitz.Rect(linha["bbox"])
+                        texto = "".join(c["c"] for c, _ in chars)
+                        matches = list(padrao.finditer(texto))
+
+                        if not matches:
+                            continue
+
+                        primeiro_c, primeiro_span = chars[matches[0].start()]
+                        x0 = primeiro_c["bbox"][0]
+                        oy = primeiro_c["origin"][1]
+                        tam = primeiro_span["size"]
 
                         retangulo = fitz.Rect(
-                            x0,
-                            bbox_linha.y0,
-                            bbox_linha.x1,
-                            bbox_linha.y1,
+                            x0 - 0.5,
+                            oy - tam * 0.8,
+                            linha["bbox"][2] + 1,
+                            oy + tam * 0.25,
                         )
 
-                        a_inserir = []
+                        desenhos = []
+                        delta = 0.0
+                        pos = matches[0].start()
 
-                        for idx in range(primeiro_alterado, len(spans)):
-                            span = spans[idx]
-                            a_inserir.append(
-                                (
-                                    novos_textos[idx],
-                                    span["chars"][0]["origin"],
+                        for m in matches:
+                            # Texto entre a ocorrência anterior e esta.
+                            for k in range(pos, m.start()):
+                                c, span = chars[k]
+                                if c["c"].isspace():
+                                    continue
+                                desenhos.append((
+                                    c["c"],
+                                    c["origin"][0] + delta,
+                                    c["origin"][1],
+                                    _fonte(span),
                                     span["size"],
-                                    span["color"],
-                                )
+                                    _cor(span["color"]),
+                                ))
+
+                            c_ini, span_ini = chars[m.start()]
+                            c_fim, _ = chars[m.end() - 1]
+                            fonte = _fonte(span_ini)
+                            tam_m = span_ini["size"]
+                            x_ini = c_ini["bbox"][0] + delta
+
+                            ast = asteriscos(m)
+                            largura_nova = fitz.get_text_length(
+                                ast, fontname=fonte, fontsize=tam_m
                             )
 
-                        # Linha justificada: não é a última do bloco e
-                        # chega à margem direita das restantes.
-                        ultima_do_bloco = idx_linha == len(linhas) - 1
-                        justificada = (
-                            not ultima_do_bloco
-                            and abs(bbox_linha.x1 - x1_max_bloco)
-                            <= TOLERANCIA_JUSTIFICADO
-                        )
+                            desenhos.append((
+                                ast,
+                                x_ini,
+                                c_ini["origin"][1],
+                                fonte,
+                                tam_m,
+                                _cor(span_ini["color"]),
+                            ))
 
-                        alvo_x1 = bbox_linha.x1 if justificada else None
+                            delta = (
+                                x_ini + largura_nova - c_fim["bbox"][2]
+                            )
+                            pos = m.end()
 
-                        ocorrencias.append(
-                            (retangulo, a_inserir, alvo_x1)
-                        )
+                        # Resto da linha depois da última ocorrência.
+                        for k in range(pos, len(chars)):
+                            c, span = chars[k]
+                            if c["c"].isspace():
+                                continue
+                            desenhos.append((
+                                c["c"],
+                                c["origin"][0] + delta,
+                                c["origin"][1],
+                                _fonte(span),
+                                span["size"],
+                                _cor(span["color"]),
+                            ))
 
-            for retangulo, _, _ in ocorrencias:
+                        trabalho.append((retangulo, desenhos))
+
+            for retangulo, _ in trabalho:
                 pagina.add_redact_annot(
                     retangulo,
                     fill=None,
                     cross_out=False,
                 )
 
-            if ocorrencias:
+            if trabalho:
                 pagina.apply_redactions(
                     images=0,
                     graphics=0,
                 )
 
-                for _, a_inserir, alvo_x1 in ocorrencias:
-                    x = a_inserir[0][1][0]  # x inicial da linha reescrita
-
-                    # Espaço extra a repartir por cada espaço da linha.
-                    extra = 0.0
-
-                    if alvo_x1 is not None:
-                        largura_natural = sum(
-                            fitz.get_text_length(
-                                texto,
-                                fontname="helv",
-                                fontsize=tamanho,
-                            )
-                            for texto, _, tamanho, _ in a_inserir
-                        )
-                        n_espacos = sum(
-                            texto.count(" ")
-                            for texto, _, _, _ in a_inserir
-                        )
-                        sobra = alvo_x1 - (x + largura_natural)
-
-                        if n_espacos > 0 and sobra > 0:
-                            extra = sobra / n_espacos
-
-                    for texto_novo, origem, tamanho, cor_int in a_inserir:
-                        cor = (
-                            ((cor_int >> 16) & 255) / 255,
-                            ((cor_int >> 8) & 255) / 255,
-                            (cor_int & 255) / 255,
+                for _, desenhos in trabalho:
+                    for texto_d, x, y, fonte, tam_d, cor in desenhos:
+                        pagina.insert_text(
+                            fitz.Point(x, y),
+                            texto_d,
+                            fontname=fonte,
+                            fontsize=tam_d,
+                            color=cor,
+                            overlay=True,
                         )
 
-                        largura_espaco = fitz.get_text_length(
-                            " ",
-                            fontname="helv",
-                            fontsize=tamanho,
-                        )
-
-                        # Escrever palavra a palavra para controlar
-                        # o espaçamento.
-                        partes = texto_novo.split(" ")
-
-                        for k, parte in enumerate(partes):
-                            if parte:
-                                pagina.insert_text(
-                                    fitz.Point(x, origem[1]),
-                                    parte,
-                                    fontname="helv",
-                                    fontsize=tamanho,
-                                    color=cor,
-                                    overlay=True,
-                                )
-
-                                x += fitz.get_text_length(
-                                    parte,
-                                    fontname="helv",
-                                    fontsize=tamanho,
-                                )
-
-                            if k < len(partes) - 1:
-                                x += largura_espaco + extra
-
-            total += len(ocorrencias)
+            total += len(trabalho)
 
         print("A guardar o PDF de saída...", flush=True)
 
@@ -719,20 +820,25 @@ def substituir_informacoes_sensiveis(
     )
 
     return total
+
+
 # ============================================================
 # Programa principal
 # ============================================================
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (2, 3):
         print(
             f"Utilização: python3 {Path(sys.argv[0]).name} "
-            "entrada.pdf saida.pdf"
+            "entrada.pdf [saida.pdf]"
         )
         return 1
 
     pdf_entrada = Path(sys.argv[1]).expanduser().resolve()
-    pdf_saida = Path(sys.argv[2]).expanduser().resolve()
+    pdf_saida = (
+        Path(sys.argv[2]).expanduser().resolve()
+        if len(sys.argv) == 3 else None
+    )
 
     try:
         # 1. Extrair texto do PDF original.
@@ -749,28 +855,29 @@ def main():
             "\nA iniciar a identificação de informações sensíveis...",
             flush=True,
         )
-
         informacoes_sensiveis = processar_com_gemini(texto)
 
-        # 3. Substituir as informações encontradas por '*'.
+        # 3. Redigir o texto e guardar o resultado final.
+        print("\nA redigir o texto...", flush=True)
+        padrao = criar_padrao(informacoes_sensiveis)
+        texto_final = redigir_texto(texto, padrao)
+
+        SUBMISSION_FILE.write_text(texto_final, encoding="utf-8")
         print(
-            "\nA iniciar a redação do PDF...",
+            f"Resultado final guardado em: {SUBMISSION_FILE}",
             flush=True,
         )
 
-        
+        # 4. (Opcional) Redigir também o PDF.
+        if pdf_saida is not None:
+            print("\nA iniciar a redação do PDF...", flush=True)
+            substituir_informacoes_sensiveis(
+                pdf_entrada,
+                pdf_saida,
+                informacoes_sensiveis,
+            )
 
-        substituir_informacoes_sensiveis(
-            pdf_entrada,
-            pdf_saida,
-            informacoes_sensiveis,
-        )
-
-        print(
-            "\nProcessamento concluído!",
-            flush=True,
-        )
-
+        print("\nProcessamento concluído!", flush=True)
         return 0
 
     except KeyboardInterrupt:
