@@ -4,7 +4,9 @@ import re
 import sys
 import time
 from pathlib import Path
-
+from api_call import *
+from parser_aux import *
+ 
 import fitz
 import requests
 from dotenv import load_dotenv
@@ -16,27 +18,13 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
 
+MAX_CHARS = 8000
+
 load_dotenv(BASE_DIR / ".env")
 
 SUBMISSION_DIR = BASE_DIR / "submission"
 SUBMISSION_FILE = SUBMISSION_DIR / "submission.txt"
 RESPONSES_FILE = SUBMISSION_DIR / "gemini_responses.txt"
-SENSITIVE_INFO_FILE = SUBMISSION_DIR / "sensitive_info.json"
-
-MAX_CHARS = 8000
-
-MODEL = "gemini-3.5-flash-lite"
-
-API_URL = (
-    "https://generativelanguage.googleapis.com/"
-    f"v1beta/models/{MODEL}:generateContent"
-)
-
-MAX_RETRIES = 4
-CONNECT_TIMEOUT = 10
-READ_TIMEOUT = 120
-
-HTTP_RETRY_CODES = {429, 500, 502, 503, 504}
 
 
 PROMPT_TEMPLATE = """
@@ -124,332 +112,11 @@ def extrair_texto_pdf(pdf_entrada):
     return texto_completo
 
 
-# ============================================================
-# Divisão do texto em blocos
-# ============================================================
-
-def dividir_texto(texto, max_chars=MAX_CHARS):
-    """Divide o texto em blocos, privilegiando limites naturais."""
-    chunks = []
-    restante = texto.strip()
-
-    while len(restante) > max_chars:
-        janela = restante[:max_chars]
-        corte = -1
-
-        for separador in ("\n\n", "\n", ". ", " "):
-            pos = janela.rfind(separador)
-
-            if pos > max_chars * 0.5:
-                corte = pos + len(separador)
-                break
-
-        if corte == -1:
-            corte = max_chars
-
-        chunks.append(restante[:corte].strip())
-        restante = restante[corte:].lstrip()
-
-    if restante:
-        chunks.append(restante)
-
-    return chunks
-
 
 # ============================================================
 # Comunicação com o Gemini
 # ============================================================
 
-def extrair_texto_resposta(data):
-    """Extrai o texto da resposta da API generateContent."""
-    candidatos = data.get("candidates") or []
-
-    if not candidatos:
-        feedback = data.get("promptFeedback") or {}
-        raise RuntimeError(
-            f"O Gemini não devolveu candidatos: {feedback or data}"
-        )
-
-    partes = candidatos[0].get("content", {}).get("parts", [])
-
-    texto = "".join(
-        parte.get("text", "")
-        for parte in partes
-    ).strip()
-
-    if not texto:
-        raise RuntimeError(
-            "O Gemini devolveu uma resposta sem texto."
-        )
-
-    return texto.replace("\n", "")
-
-def pedir_gemini(session, api_key, prompt):
-    """Envia um pedido ao Gemini e repete erros temporários."""
-    headers = {
-        "Content-Type": "application/json",
-        "x-goog-api-key": api_key,
-    }
-
-    corpo = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ],
-        "generationConfig": {
-            "responseMimeType": "application/json"
-        },
-    }
-
-    for tentativa in range(1, MAX_RETRIES + 1):
-        try:
-            resposta = session.post(
-                API_URL,
-                headers=headers,
-                json=corpo,
-                timeout=(CONNECT_TIMEOUT, READ_TIMEOUT),
-            )
-
-        except (
-            requests.Timeout,
-            requests.ConnectionError,
-        ) as erro:
-            if tentativa == MAX_RETRIES:
-                raise RuntimeError(
-                    f"Falha de ligação após {MAX_RETRIES} tentativas: "
-                    f"{erro}"
-                ) from erro
-
-            espera = 2 ** tentativa
-
-            print(
-                f"Erro de ligação: {erro}. "
-                f"Nova tentativa em {espera}s "
-                f"({tentativa}/{MAX_RETRIES})...",
-                flush=True,
-            )
-
-            time.sleep(espera)
-            continue
-
-        if resposta.status_code in HTTP_RETRY_CODES:
-            if tentativa == MAX_RETRIES:
-                raise RuntimeError(
-                    f"Falha após {MAX_RETRIES} tentativas. "
-                    f"HTTP {resposta.status_code}: "
-                    f"{resposta.text[:1000]}"
-                )
-
-            espera = 2 ** tentativa
-
-            print(
-                f"Erro HTTP {resposta.status_code}. "
-                f"Nova tentativa em {espera}s "
-                f"({tentativa}/{MAX_RETRIES})...",
-                flush=True,
-            )
-
-            time.sleep(espera)
-            continue
-
-        if not resposta.ok:
-            raise RuntimeError(
-                f"Erro HTTP {resposta.status_code}: "
-                f"{resposta.text[:2000]}"
-            )
-
-        try:
-            data = resposta.json()
-        except ValueError as erro:
-            raise RuntimeError(
-                "A API devolveu uma resposta que não é JSON válido."
-            ) from erro
-
-        return extrair_texto_resposta(data)
-
-    raise RuntimeError("Não foi possível obter uma resposta do Gemini.")
-
-
-# ============================================================
-# Conversão da resposta do Gemini numa lista Python
-# ============================================================
-
-def converter_resposta_em_lista(resposta):
-    """Converte uma resposta JSON do Gemini numa lista de strings."""
-    texto = resposta.strip()
-
-    # Tolerar blocos Markdown, caso o modelo os devolva.
-    texto = re.sub(
-        r"\A```(?:json)?\s*",
-        "",
-        texto,
-        flags=re.IGNORECASE,
-    )
-    texto = re.sub(r"\s*```\Z", "", texto)
-
-    try:
-        dados = json.loads(texto)
-
-    except json.JSONDecodeError:
-        # Recuperação caso exista texto adicional antes do array JSON.
-        inicio = texto.find("[")
-
-        if inicio == -1:
-            raise RuntimeError(
-                f"A resposta do Gemini não contém um array JSON válido: "
-                f"{resposta[:500]}"
-            )
-
-        try:
-            dados, _ = json.JSONDecoder().raw_decode(texto[inicio:])
-        except json.JSONDecodeError as erro:
-            raise RuntimeError(
-                f"Não foi possível interpretar a resposta JSON: "
-                f"{resposta[:500]}"
-            ) from erro
-
-    if not isinstance(dados, list):
-        raise RuntimeError(
-            "A resposta do Gemini não é uma lista JSON."
-        )
-
-    resultado = []
-
-    for item in dados:
-        if not isinstance(item, str):
-            raise RuntimeError(
-                "O array JSON contém um elemento que não é uma string."
-            )
-
-        item = item.strip()
-
-        if item:
-            resultado.append(item)
-
-    return resultado
-
-
-# ============================================================
-# Identificação de informações sensíveis
-# ============================================================
-
-def processar_com_gemini(texto):
-    """
-    Envia o texto ao Gemini, recolhe as informações sensíveis
-    e devolve uma lista de strings sem duplicados.
-    """
-    api_key = os.environ.get("GEMINI_API_KEY")
-
-    if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY não encontrada. "
-            "Verifica o ficheiro .env."
-        )
-
-    chunks = dividir_texto(texto)
-    numero_chunks = len(chunks)
-
-    if not chunks:
-        print(
-            "Não existe texto para enviar ao Gemini.",
-            flush=True,
-        )
-        return []
-
-    print(
-        f"Texto dividido em {numero_chunks} parte(s).",
-        flush=True,
-    )
-
-    respostas = []
-    informacoes_sensiveis = []
-    vistas = set()
-
-    with requests.Session() as session:
-        for i, chunk in enumerate(chunks, start=1):
-            print(
-                f"A analisar parte {i}/{numero_chunks} "
-                f"({len(chunk)} caracteres)...",
-                flush=True,
-            )
-
-            prompt = PROMPT_TEMPLATE.format(
-                i=i,
-                n=numero_chunks,
-                chunk=chunk,
-            )
-
-            inicio = time.monotonic()
-
-            resposta = pedir_gemini(
-                session,
-                api_key,
-                prompt,
-            )
-
-            duracao = time.monotonic() - inicio
-
-            respostas.append(resposta)
-
-            lista_parte = converter_resposta_em_lista(resposta)
-
-            # Combinar as listas e eliminar duplicados.
-            for informacao in lista_parte:
-                chave = re.sub(
-                    r"\s+",
-                    " ",
-                    informacao,
-                ).casefold()
-
-                if chave not in vistas:
-                    vistas.add(chave)
-                    informacoes_sensiveis.append(informacao)
-
-            print(
-                f"Parte {i}/{numero_chunks} concluída em "
-                f"{duracao:.1f}s. "
-                f"{len(lista_parte)} elemento(s) identificado(s).",
-                flush=True,
-            )
-
-    SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
-
-    # Guardar as respostas individuais do Gemini.
-    with RESPONSES_FILE.open("w", encoding="utf-8") as ficheiro:
-        for i, resposta in enumerate(respostas, start=1):
-            ficheiro.write(
-                f"===== Parte {i}/{numero_chunks} =====\n"
-                f"{resposta}\n\n"
-            )
-
-    # Guardar a lista final para poder ser inspecionada.
-    with SENSITIVE_INFO_FILE.open("w", encoding="utf-8") as ficheiro:
-        json.dump(
-            informacoes_sensiveis,
-            ficheiro,
-            ensure_ascii=False,
-            indent=2,
-        )
-        ficheiro.write("\n")
-
-    print(
-        f"Total de informações sensíveis únicas: "
-        f"{len(informacoes_sensiveis)}",
-        flush=True,
-    )
-    print(
-        f"Lista guardada em: {SENSITIVE_INFO_FILE}",
-        flush=True,
-    )
-    print(
-        f"Respostas guardadas em: {RESPONSES_FILE}",
-        flush=True,
-    )
-
-    return informacoes_sensiveis
 
 
 # ============================================================
@@ -497,10 +164,6 @@ def criar_padrao(informacoes_sensiveis):
         "|".join(alternativas),
         re.IGNORECASE,
     )
-
-def asteriscos(match):
-    """'Maria do Santos' -> '* * *' (um asterisco por palavra)."""
-    return " ".join("*" for _ in match.group().split())
 
 
 def substituir_informacoes_sensiveis(
@@ -574,6 +237,16 @@ def substituir_informacoes_sensiveis(
                             original = "".join(
                                 c["c"] for c in span["chars"]
                             )
+
+                            # Numerar as palavras do texto.
+                            original = re.sub(
+                                r"\S+",
+                                lambda m: f"[{m.start()}]{m.group()}",
+                                original,
+                            )
+
+                            novo = padrao.sub(asteriscos, original)
+                            novos_textos.append(novo)
                             novo = padrao.sub(asteriscos, original)
                             novos_textos.append(novo)
 
