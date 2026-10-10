@@ -28,7 +28,7 @@ SENSITIVE_INFO_FILE = SUBMISSION_DIR / "sensitive_info.json"
 
 LIMIAR_LINHA_CHEIA = 0.75  # linha >= 75% da largura => a frase continua
 
-MAX_CHARS = 8000
+MAX_CHARS = 4000
 
 MODEL = "gemini-3.5-flash-lite"
 
@@ -44,54 +44,48 @@ READ_TIMEOUT = 120
 HTTP_RETRY_CODES = {429, 500, 502, 503, 504}
 
 
-PROMPT_TEMPLATE = """
-Read this document containing diverse information. Every word is preceded by
-a numeric id in square brackets, like [12]word. The ids are not part of the
-document; they only identify each word.
+PROMPT_TEMPLATE = """You are an Elite Medical Privacy AI. Your ONLY mission is to perfectly redact Personal Identifiable Information (PII) and Protected Health Information (PHI) from a Portuguese clinical document. 
 
-This information can be sensitive, personal, private, physical, mental,
-political, religious, financial, health related, ethnic, among others. Your
-task is to process all this information and abstract all the important or
-sensitive topics that the user can choose to censor.
+You receive text where every word has a numeric ID, like [12]word.
 
-Create a JSON object containing all the sensitive data, organized as follows:
-1. The primary keys are the most generic word for the topic (for example:
-   Biometric Data, Personal Information, Health Data, Racial Ethnicity).
-2. Inside each topic there is another object with more specific sub-topics
-   (for example, in Health Data: Health Condition, Mental State, Medication,
-   Family History).
-3. Inside each sub-topic there is another object where each key is one
-   sensitive word and its value is the list of ids where that word occurs.
+### THE CONTEXT TEST (ASK YOURSELF THIS):
+Before extracting any word, ask: "Does this specific word help identify the patient, their family, or the doctor?"
+- If YES (it's a name, trait, condition, or personal contact) -> CENSOR IT.
+- If NO (it's a clinic name, a label, a generic verb, or standard text) -> IGNORE IT.
 
-Rules:
-- Capture only the essential words, so the text stays comprehensible when
-  those words are replaced with '*'. Never include labels or connecting words.
-- Use one key per word. A value with several words gives several keys.
-- Write each word exactly as it is in the document, character by character,
-  without the id and without punctuation attached to its start or end. Do not
-  translate, reformat or correct it.
-- The ids must be integers copied exactly from the document.
-- Each topic, sub-topic and word appears only once as a key. If a word occurs
-  several times, put all its ids in the same list.
-- Keep the original language of the document for the words.
-- If there is no sensitive information, return {{}}.
+### 🔴 WHAT YOU MUST CENSOR (PERSONAL & SENSITIVE):
+1. Demographics & Traits: Age, gender ("Feminino", "Masculino", "M", "F"), marital status ("Divorciada", "Solteiro", "Casado"), nationality, and professions/occupations ("Engenheira", "Professor").
+2. Social & Family: Any mention of family members or companions (e.g., "Irmão", "Mãe", "Esposo").
+3. Contacts & Identifiers: Personal addresses, phone numbers, NIF, CC, and ALL emails (including a doctor's email like "dr.silva@clinica.pt").
+4. Specific Medical Data: The patient's personal diagnoses, diseases, symptoms, specific test results, biometrics (weight/height), and FULL PRESCRIPTIONS (medication name + dosage + frequency, e.g., "Metformina 850mg 2x/dia").
+5. Life Dates: Birthdates, admission dates, diagnosis dates.
 
-Example document:
-[0]A [1]paciente [2]Ana [3]Correia, [4]de [5]25 [6]anos [7]e [8]67kg, [9]veio
-[10]à [11]consulta [12]por [13]depressão. [14]A [15]mãe [16]de [17]Ana
-[18]também [19]tem [20]depressão.
+### 🟢 WHAT YOU MUST NEVER CENSOR (STRICTLY IGNORE):
+1. Institutions: Names, addresses, or contacts of clinics, hospitals, and companies (e.g., "Consultório de Lisboa", "Hospital da Luz" are NEVER censored).
+2. Labels & Keys: Words that introduce data, like "Nome:", "Idade:", "Sexo:", "Estado Civil:", "Prescrição:", "Morada:". (Only censor the value after them).
+3. Generic Text & Grammar: Normal verbs, common nouns, pronouns, articles, and generic medical advice (e.g., "O doente deve descansar", "Apresentou melhorias").
+4. Document Metadata: Headers, page numbers, reference codes (e.g., "Processo nº 1234"), and the document's print date.
 
-Example output:
-{{"Personal Information": {{"Name": {{"Ana": [2, 17], "Correia": [3]}}}},
- "Biometric Data": {{"Weight": {{"67kg": [8]}}}},
- "Health Data": {{"Mental State": {{"depressão": [13]}},
-                 "Family History": {{"depressão": [20]}}}}}}
-Return only the JSON object, with no explanation and no code fences.
+### RULE: CENSOR COMPLETE EXPRESSIONS
+When a personal value has multiple words, extract EVERY word, including connectors ("de", "da", "do", "e").
+- Date: "25 de abril de 1978" -> extract all 5 words.
+- Disease: "cancro da mama" -> extract all 3 words.
 
+### EXACT FORMATTING
+- Return the EXACT word without trailing/leading punctuation (e.g., [4]Lisboa, -> "Lisboa"; [12](ansiedade) -> "ansiedade"). Keep internal characters (e.g., "ana@mail.pt", "2x/dia").
+- The ID must match the bracket number perfectly.
+- Return ONLY a valid JSON array of `[string, integer]` pairs, ordered by id. NO Markdown, NO explanations.
 
-Document part {i} of {n}:
+### THE MASTER EXAMPLE (STUDY THIS CAREFULLY)
+Input:
+[0]Clínica [1]Médica [2]de [3]Lisboa [4]Email: [5]dr.rui@clinica.pt [6]Processo: [7]ADM-99 [8]Nome: [9]Ana [10]Sexo: [11]Feminino [12]Estado [13]Civil: [14]Divorciada [15]Profissão: [16]Bancária [17]Acompanhante: [18]Irmão [19](Carlos). [20]Histórico: [21]cancro [22]da [23]mama [24]Prescrição: [25]Ibuprofeno [26]600mg [27]2x/dia. [28]O [29]tratamento [30]deve [31]continuar [32]em [33]casa.
 
---- DOCUMENT PART ---
+Output:
+[["dr.rui@clinica.pt", 5], ["Ana", 9], ["Feminino", 11], ["Divorciada", 14], ["Bancária", 16], ["Irmão", 18], ["Carlos", 19], ["cancro", 21], ["da", 22], ["mama", 23], ["Ibuprofeno", 25], ["600mg", 26], ["2x/dia", 27]]
+
+(Explanation for the AI: "Clínica de Lisboa" and "ADM-99" are ignored. Labels like "Sexo:" are ignored. The generic sentence "O tratamento deve continuar em casa." is ignored. But the doctor's email, all demographics, the family member, the full disease, and the full prescription are extracted perfectly.)
+ 
+--- DOCUMENT PART {i} OF {n} ---
 {chunk}
 """
 
@@ -144,6 +138,9 @@ def extrair_texto_pdf(pdf_entrada):
 # Palavras numeradas e divisão em blocos
 # ============================================================
 
+# Pontuação que nunca faz parte do valor (+, -, @, /, %, € ficam).
+PONT_SEP = ".,;:!?()[]{}\"'«»“”‘’…"
+
 PONTUACAO = re.compile(r"^(\W*)(.*?)(\W*)$", re.DOTALL)
 
 
@@ -151,6 +148,22 @@ def separar_token(token):
     """'Correia,' -> ('', 'Correia', ',')."""
     m = PONTUACAO.match(token)
     return m.group(1), m.group(2), m.group(3)
+
+
+def variantes_token(token):
+    """
+    Formas como o Gemini pode escrever uma palavra, com o que deve ficar
+    à volta quando é censurada: [(palavra, prefixo, sufixo), ...].
+    Ex.: '+351,' -> ('351','+',','), ('+351','',','), ('351,','+',''),
+         ('+351,','','').
+    """
+    pre, core, suf = separar_token(token)
+    return [
+        (core, pre, suf),
+        (pre + core, "", suf),
+        (core + suf, pre, ""),
+        (token, "", ""),
+    ]
 
 
 def dividir_em_blocos(palavras, max_chars=MAX_CHARS):
@@ -298,13 +311,13 @@ def pedir_gemini(session, api_key, prompt):
 
 
 # ============================================================
-# Conversão da resposta do Gemini num dicionário Python
+# Conversão da resposta do Gemini numa lista de pares
 # ============================================================
 
-def converter_resposta_em_dict(resposta):
+def converter_resposta_em_lista(resposta):
     """
-    Converte a resposta JSON do Gemini em
-    {tópico: {subtópico: {palavra: set(ids)}}}.
+    Converte a resposta JSON do Gemini numa lista de tuplos
+    (palavra, id). Entradas mal formadas são ignoradas com um aviso.
     """
     texto = resposta.strip()
 
@@ -318,11 +331,11 @@ def converter_resposta_em_dict(resposta):
         dados = json.loads(texto)
 
     except json.JSONDecodeError:
-        inicio = texto.find("{")
+        inicio = texto.find("[")
 
         if inicio == -1:
             raise RuntimeError(
-                f"A resposta do Gemini não contém um objeto JSON válido: "
+                f"A resposta do Gemini não contém um array JSON válido: "
                 f"{resposta[:500]}"
             )
 
@@ -334,79 +347,102 @@ def converter_resposta_em_dict(resposta):
                 f"{resposta[:500]}"
             ) from erro
 
-    if not isinstance(dados, dict):
-        raise RuntimeError("A resposta do Gemini não é um objeto JSON.")
+    if not isinstance(dados, list):
+        raise RuntimeError("A resposta do Gemini não é uma lista JSON.")
 
-    resultado = {}
+    pares = []
+    ignorados = 0
 
-    for topico, subtopicos in dados.items():
-        if not isinstance(subtopicos, dict):
-            print(
-                f"Aviso: tópico '{topico}' ignorado (formato inesperado).",
-                flush=True,
-            )
+    for item in dados:
+        if (
+            isinstance(item, (list, tuple))
+            and len(item) == 2
+            and isinstance(item[0], str)
+        ):
+            # Se o Gemini incluir pontuação colada ("ansiedade)", "2x/dia,"),
+            # retira-a para não ser apagada do texto.
+            palavra = item[0].strip().strip(PONT_SEP).strip()
+
+            try:
+                if palavra:
+                    pares.append((palavra, int(item[1])))
+                    continue
+            except (TypeError, ValueError):
+                pass
+
+        ignorados += 1
+
+    if ignorados:
+        print(
+            f"Aviso: {ignorados} entrada(s) mal formada(s) ignorada(s).",
+            flush=True,
+        )
+
+    return pares
+
+
+def validar_pares(pares, tokens, janela=3):
+    """
+    Só aceita (palavra, id) se a palavra na posição 'id' for mesmo essa
+    palavra (ignorando pontuação colada). Se o id vier deslocado até
+    'janela' posições, corrige-o para a posição certa mais próxima.
+    Devolve (válidos, corrigidos, descartados).
+    """
+
+    def casa(palavra, j):
+        return 0 <= j < len(tokens) and any(
+            chave and palavra == chave
+            for chave, _, _ in variantes_token(tokens[j])
+        )
+
+    validos = []
+    corrigidos = []
+    descartados = []
+
+    for palavra, i in pares:
+        if casa(palavra, i):
+            validos.append((palavra, i))
             continue
 
-        for subtopico, palavras in subtopicos.items():
-            if not isinstance(palavras, dict):
-                print(
-                    f"Aviso: subtópico '{topico}/{subtopico}' ignorado "
-                    "(formato inesperado).",
-                    flush=True,
-                )
-                continue
+        for d in range(1, janela + 1):
+            achado = next(
+                (j for j in (i - d, i + d) if casa(palavra, j)), None
+            )
 
-            for palavra, ids in palavras.items():
-                if isinstance(ids, (int, str)):
-                    ids = [ids]
+            if achado is not None:
+                validos.append((palavra, achado))
+                corrigidos.append((palavra, i, achado))
+                break
+        else:
+            descartados.append((palavra, i))
 
-                if not isinstance(ids, list):
-                    continue
-
-                validos = set()
-
-                for x in ids:
-                    try:
-                        validos.add(int(x))
-                    except (TypeError, ValueError):
-                        continue
-
-                if validos and str(palavra).strip():
-                    resultado.setdefault(topico, {}).setdefault(
-                        subtopico, {}
-                    ).setdefault(str(palavra).strip(), set()).update(validos)
-
-    return resultado
+    return validos, corrigidos, descartados
 
 
-def juntar_dicts(destino, parte):
-    """Junta 'parte' em 'destino' (união dos ids)."""
-    for topico, subtopicos in parte.items():
-        for subtopico, palavras in subtopicos.items():
-            for palavra, ids in palavras.items():
-                destino.setdefault(topico, {}).setdefault(
-                    subtopico, {}
-                ).setdefault(palavra, set()).update(ids)
+def lista_para_dict(pares):
+    """[(palavra, id), ...] -> {palavra: {ids}} (usado por FinalText)."""
+    d = {}
+
+    for palavra, i in pares:
+        d.setdefault(palavra, set()).add(i)
+
+    return d
 
 
-def dict_para_json(d):
-    return {
-        t: {
-            s: {p: sorted(ids) for p, ids in ps.items()}
-            for s, ps in ss.items()
-        }
-        for t, ss in d.items()
-    }
+def guardar_sensivel(pares):
+    """Guarda a lista de pares em sensitive_info.json, um par por linha."""
+    SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
+    linhas = [
+        "  " + json.dumps([palavra, i], ensure_ascii=False)
+        for palavra, i in pares
+    ]
 
-def json_para_dict(dados):
-    return {
-        t: {
-            s: {p: set(ids) for p, ids in ps.items()}
-            for s, ps in ss.items()
-        }
-        for t, ss in dados.items()
-    }
+    SENSITIVE_INFO_FILE.write_text(
+        "[\n" + ",\n".join(linhas) + "\n]\n", encoding="utf-8"
+    )
+
+    print(f"Lista guardada em: {SENSITIVE_INFO_FILE}", flush=True)
 
 
 # ============================================================
@@ -415,8 +451,9 @@ def json_para_dict(dados):
 
 def processar_com_gemini(texto):
     """
-    Envia o texto (palavras numeradas) ao Gemini e devolve
-    {tópico: {subtópico: {palavra: set(ids)}}} já combinado.
+    Envia o texto (palavras numeradas) ao Gemini e devolve a lista
+    ordenada de tuplos (palavra, id), sem duplicados e já validada
+    contra o texto.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -426,17 +463,18 @@ def processar_com_gemini(texto):
             "Verifica o ficheiro .env."
         )
 
-    chunks = dividir_em_blocos(texto.split())
+    tokens = texto.split()
+    chunks = dividir_em_blocos(tokens)
     numero_chunks = len(chunks)
 
     if not chunks:
         print("Não existe texto para enviar ao Gemini.", flush=True)
-        return {}
+        return []
 
     print(f"Texto dividido em {numero_chunks} parte(s).", flush=True)
 
     respostas = []
-    resultado = {}
+    resultado = set()
 
     with requests.Session() as session:
         for i, chunk in enumerate(chunks, start=1):
@@ -456,16 +494,28 @@ def processar_com_gemini(texto):
 
             respostas.append(resposta)
 
-            parte = converter_resposta_em_dict(resposta)
-            juntar_dicts(resultado, parte)
+            pares = converter_resposta_em_lista(resposta)
+            validos, corrigidos, descartados = validar_pares(pares, tokens)
+            resultado.update(validos)
 
-            n_palavras = sum(
-                len(ps) for ss in parte.values() for ps in ss.values()
-            )
+            if corrigidos:
+                print(
+                    f"Aviso: {len(corrigidos)} id(s) deslocado(s) "
+                    f"corrigido(s) (palavra, id dado, id certo): "
+                    f"{corrigidos[:10]}",
+                    flush=True,
+                )
+
+            if descartados:
+                print(
+                    f"Aviso: {len(descartados)} par(es) descartado(s) "
+                    f"(a palavra não está nesse id): {descartados[:10]}",
+                    flush=True,
+                )
 
             print(
                 f"Parte {i}/{numero_chunks} concluída em {duracao:.1f}s. "
-                f"{n_palavras} palavra(s) identificada(s).",
+                f"{len(validos)} palavra(s) identificada(s).",
                 flush=True,
             )
 
@@ -478,81 +528,13 @@ def processar_com_gemini(texto):
                 f"{resposta}\n\n"
             )
 
-    guardar_sensivel(resultado)
+    ordenado = sorted(resultado, key=lambda par: (par[1], par[0]))
+
+    guardar_sensivel(ordenado)
 
     print(f"Respostas guardadas em: {RESPONSES_FILE}", flush=True)
 
-    return resultado
-
-
-def guardar_sensivel(d):
-    SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
-
-    texto = json.dumps(dict_para_json(d), ensure_ascii=False, indent=2)
-
-    # Listas de ids na mesma linha: "Ana": [2, 17]
-    texto = re.sub(
-        r"\[\s*(\d[\d,\s]*?)\s*\]",
-        lambda m: "["
-        + ", ".join(x.strip() for x in m.group(1).split(",") if x.strip())
-        + "]",
-        texto,
-    )
-
-    SENSITIVE_INFO_FILE.write_text(texto + "\n", encoding="utf-8")
-
-    print(f"Lista guardada em: {SENSITIVE_INFO_FILE}", flush=True)
-
-
-# ============================================================
-# Filtragem por subtópicos
-# ============================================================
-
-def subtopicos_disponiveis(d):
-    """Nomes de todos os subtópicos (atributos) do dicionário."""
-    return sorted({sub for ss in d.values() for sub in ss})
-
-
-def resolver_campos(d, pedidos):
-    """Converte nomes pedidos (sem distinguir maiúsculas) em subtópicos."""
-    if not pedidos:
-        return None  # None = todos
-
-    por_nome = {s.casefold(): s for s in subtopicos_disponiveis(d)}
-    campos = set()
-
-    for p in pedidos:
-        nome = por_nome.get(p.strip().casefold())
-
-        if nome is None:
-            print(f"Aviso: subtópico desconhecido ignorado: {p}", flush=True)
-        else:
-            campos.add(nome)
-
-    return campos
-
-
-"""
-Creates a flat dictionary from a nested dictionary, filtering by specific
-attributes.
-
-Args:
-d (dict): Nested dictionary in the format
-          {category: {attribute: {name: t, ...}, ...}, ...}.
-fields (iterable | None): Names of the attributes to keep (None = all).
-
-Returns:
-dict: A flat dictionary {name: t}. If the same name appears under several
-      attributes, the positions in `t` are merged.
-"""
-def createDict(d, fields):
-    newDict = {}
-    for categoria, subdict in d.items():
-        for atributo, list_words in subdict.items():
-            if fields is None or atributo in fields:
-                for name, t in list_words.items():
-                    newDict.setdefault(name, set()).update(t)
-    return newDict
+    return ordenado
 
 
 # ============================================================
@@ -561,13 +543,9 @@ def createDict(d, fields):
 
 def censurar_token(i, token, WordsSet):
     """Devolve (token_novo, foi_censurado). Mantém a pontuação à volta."""
-    pre, core, suf = separar_token(token)
-
-    if core and core in WordsSet and i in WordsSet[core]:
-        return f"{pre}*{suf}", True
-
-    if token in WordsSet and i in WordsSet[token]:
-        return "*", True
+    for chave, pre, suf in variantes_token(token):
+        if chave and chave in WordsSet and i in WordsSet[chave]:
+            return f"{pre}*{suf}", True
 
     return token, False
 
@@ -593,6 +571,12 @@ def frases_sensiveis(Document, WordsSet):
             continue
 
         parte = core or token
+
+        # Ex.: '+351' (o '+' faz parte do valor)
+        for chave, _, _ in variantes_token(token):
+            if chave and chave in WordsSet and i in WordsSet[chave]:
+                parte = chave
+                break
 
         if atual and (pre or suf_anterior):
             frases.append(" ".join(atual))
@@ -1018,11 +1002,6 @@ def main():
         help="PDF redigido (opcional)",
     )
     parser.add_argument(
-        "--fields", default=None,
-        help="Subtópicos a censurar, separados por vírgula "
-             "(por defeito: todos). Ex.: --fields 'Name,Weight'",
-    )
-    parser.add_argument(
         "--reuse", action="store_true",
         help="Reutiliza sensitive_info.json em vez de chamar o Gemini.",
     )
@@ -1043,30 +1022,27 @@ def main():
                 "Se for um PDF digitalizado, será necessário OCR."
             )
 
-        # 2. Obter o dicionário de informações sensíveis.
+        # 2. Obter a lista de tuplos (palavra, id).
         if args.reuse and SENSITIVE_INFO_FILE.is_file():
             print("\nA reutilizar sensitive_info.json...", flush=True)
-            d = json_para_dict(
-                json.loads(SENSITIVE_INFO_FILE.read_text(encoding="utf-8"))
-            )
+            pares = [
+                (palavra, int(i))
+                for palavra, i in json.loads(
+                    SENSITIVE_INFO_FILE.read_text(encoding="utf-8")
+                )
+            ]
         else:
             print(
                 "\nA iniciar a identificação de informações sensíveis...",
                 flush=True,
             )
-            d = processar_com_gemini(texto)
+            pares = processar_com_gemini(texto)
 
-        print(
-            "Subtópicos encontrados: "
-            + (", ".join(subtopicos_disponiveis(d)) or "(nenhum)"),
-            flush=True,
-        )
+        print(f"Total de palavras a censurar: {len(pares)}", flush=True)
 
-        # 3. Filtrar pelos subtópicos escolhidos e redigir o texto.
-        pedidos = args.fields.split(",") if args.fields else None
-        campos = resolver_campos(d, pedidos)
-        palavras = createDict(d, campos)
+        palavras = lista_para_dict(pares)
 
+        # 3. Redigir o texto.
         print("\nA redigir o texto...", flush=True)
         texto_final = FinalText(texto, palavras)
 
