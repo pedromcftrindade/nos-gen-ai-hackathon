@@ -8,7 +8,7 @@ from detector import carregar_sensivel, processar_com_gemini
 from parser_aux import lista_para_dict
 from pdf_extract import extrair_texto_pdf
 from redact_pdf import substituir_informacoes_sensiveis
-from redact_text import FinalText, frases_sensiveis
+from redact_text import FinalText, substituicoes_por_id
 
 
 def main():
@@ -73,7 +73,7 @@ def main():
         substituir_informacoes_sensiveis(
             pdf_entrada,
             pdf_saida,
-            frases_sensiveis(texto, palavras),
+            substituicoes_por_id(texto, palavras),
         )
 
         print("\nProcessamento concluído!", flush=True)

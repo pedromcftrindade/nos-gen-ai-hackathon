@@ -3,7 +3,7 @@ import re
 import textwrap
 
 from config import LIMIAR_LINHA_CHEIA
-from parser_aux import separar_token, variantes_token
+from parser_aux import variantes_token
 
 
 def censurar_token(i, token, WordsSet):
@@ -15,49 +15,21 @@ def censurar_token(i, token, WordsSet):
     return token, False
 
 
-def frases_sensiveis(Document, WordsSet):
+def substituicoes_por_id(Document, WordsSet):
     """
-    Junta palavras censuradas consecutivas em frases ('Ana Correia'),
-    para redigir também o PDF.
+    {id: token_novo} para cada palavra censurada (ex.: 5 -> '*',
+    12 -> '(*)', 7 -> '*,'). Usa os MESMOS ids e a mesma regra que o
+    FinalText, por isso o PDF fica igual ao submission.txt.
     """
-    frases = []
-    atual = []
-    suf_anterior = ""
+    trocas = {}
 
     for i, token in enumerate(Document.split()):
-        _, censurado = censurar_token(i, token, WordsSet)
-        pre, core, suf = separar_token(token)
+        novo, censurado = censurar_token(i, token, WordsSet)
 
-        if not censurado:
-            if atual:
-                frases.append(" ".join(atual))
-                atual = []
-            suf_anterior = ""
-            continue
+        if censurado:
+            trocas[i] = novo
 
-        parte = core or token
-
-        # Ex.: '+351' (o '+' faz parte do valor)
-        for chave, _, _ in variantes_token(token):
-            if chave and chave in WordsSet and i in WordsSet[chave]:
-                parte = chave
-                break
-
-        if atual and (pre or suf_anterior):
-            frases.append(" ".join(atual))
-            atual = []
-
-        atual.append(parte)
-        suf_anterior = suf
-
-        if suf:
-            frases.append(" ".join(atual))
-            atual = []
-
-    if atual:
-        frases.append(" ".join(atual))
-
-    return frases
+    return trocas
 
 
 def FinalText(Document, WordsSet):
@@ -135,17 +107,22 @@ def _redigir_bloco(linhas, novas, alterada, primeira, ultima, bloco):
         if pos + 1 == len(bloco):
             break
 
-        seguinte = linhas[bloco[pos + 1]].lstrip()
+        proxima = bloco[pos + 1]
+        seguinte = linhas[proxima].lstrip()
 
         # Nome partido entre duas linhas ("Maria" / "Clara"): continua.
-        partido = ultima[k] and primeira[bloco[pos + 1]]
+        partido = ultima[k] and primeira[proxima]
 
         # A frase só continua na linha seguinte se esta linha estiver
         # (quase) cheia E a seguinte não começar com maiúscula.
         # Linhas de campos ("Seguro de saúde: ...", "Rendimento: ...")
         # começam com maiúscula, por isso nunca são juntadas.
+        # Se a primeira palavra da linha seguinte foi censurada, a
+        # maiúscula é de um valor sensível (ex.: "HIV", um nome) e não
+        # de um campo novo: a frase continua.
         cheia = len(linhas[k].rstrip()) >= limiar
-        continua = cheia and not seguinte[:1].isupper()
+        maiuscula = seguinte[:1].isupper() and not primeira[proxima]
+        continua = cheia and not maiuscula
 
         if not (partido or continua):
             paragrafos.append(atual)

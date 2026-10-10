@@ -1,53 +1,8 @@
-"""Substituição das informações sensíveis no PDF."""
-import re
+"""Substituição das informações sensíveis no PDF (por id de palavra)."""
+from difflib import SequenceMatcher
 from pathlib import Path
 
 import fitz
-
-
-def criar_padrao(informacoes_sensiveis):
-    """Constrói uma expressão regular para encontrar os elementos."""
-    informacoes = []
-    vistas = set()
-
-    for informacao in informacoes_sensiveis:
-        informacao = informacao.strip()
-
-        if not informacao:
-            continue
-
-        chave = re.sub(r"\s+", " ", informacao).casefold()
-
-        if chave not in vistas:
-            vistas.add(chave)
-            informacoes.append(informacao)
-
-    if not informacoes:
-        return None
-
-    # Procurar primeiro as expressões mais longas.
-    informacoes.sort(key=len, reverse=True)
-
-    alternativas = []
-
-    for informacao in informacoes:
-        # Espaços/quebras de linha entre palavras casam com qualquer \s+
-        palavras = informacao.split()
-        alternativa = r"\s+".join(re.escape(p) for p in palavras)
-
-        # Evitar, por exemplo, encontrar "Ana" dentro de "Banana".
-        if informacao[0].isalnum():
-            alternativa = r"(?<!\w)" + alternativa
-
-        if informacao[-1].isalnum():
-            alternativa += r"(?!\w)"
-
-        alternativas.append(alternativa)
-
-    return re.compile(
-        "|".join(alternativas),
-        re.IGNORECASE,
-    )
 
 
 def _fonte(span):
@@ -72,11 +27,6 @@ def _cor(cor_int):
     )
 
 
-def _asteriscos_texto(texto):
-    """'Maria Clara' -> '* *' (um asterisco por palavra)."""
-    return " ".join("*" for _ in texto.split())
-
-
 def _linhas_da_pagina(pagina):
     """Devolve [(linha, [(char, span), ...]), ...] por ordem de leitura."""
     linhas = []
@@ -95,52 +45,90 @@ def _linhas_da_pagina(pagina):
     return linhas
 
 
-def _fragmentos_por_linha(linhas, padrao):
+def _palavras_da_linha(chars):
+    """[(ini, fim), ...]: índices em chars de cada palavra da linha."""
+    palavras = []
+    ini = None
+
+    for k, (c, _) in enumerate(chars):
+        if c["c"].isspace():
+            if ini is not None:
+                palavras.append((ini, k))
+                ini = None
+        elif ini is None:
+            ini = k
+
+    if ini is not None:
+        palavras.append((ini, len(chars)))
+
+    return palavras
+
+
+def _alinhar(palavras_texto, palavras_pdf):
     """
-    Procura o padrão no texto da PÁGINA INTEIRA (linhas unidas por '\\n',
-    tal como no texto extraído) e reparte cada ocorrência pelas linhas
-    que atravessa. Assim, valores partidos em várias linhas
-    (ex.: "Manuel Almeida Machado" / "Morgado André") também são apanhados.
-
-    Devolve, para cada linha, uma lista de (inicio, fim) em índices de chars.
+    Liga cada palavra de pagina.get_text().split() (as que têm os ids)
+    à palavra correspondente no rawdict. Normalmente é 1 para 1; se
+    as duas listas diferirem, alinha-as por sequência.
+    Devolve mapa[t] = índice no rawdict (ou None).
     """
-    textos = ["".join(c["c"] for c, _ in chars) for _, chars in linhas]
+    if palavras_texto == palavras_pdf:
+        return list(range(len(palavras_texto)))
 
-    offsets = []
-    pos = 0
-    for t in textos:
-        offsets.append(pos)
-        pos += len(t) + 1  # +1 pelo '\n'
+    mapa = [None] * len(palavras_texto)
+    sm = SequenceMatcher(None, palavras_texto, palavras_pdf, autojunk=False)
 
-    texto_pagina = "\n".join(textos)
-    fragmentos = [[] for _ in linhas]
+    for a, b, n in sm.get_matching_blocks():
+        for d in range(n):
+            mapa[a + d] = b + d
 
-    for m in padrao.finditer(texto_pagina):
-        for i, (off, t) in enumerate(zip(offsets, textos)):
-            ini = max(m.start(), off)
-            fim = min(m.end(), off + len(t))
-
-            if ini >= fim:
-                continue
-
-            # Ignorar espaços nas pontas do fragmento.
-            while ini < fim and texto_pagina[ini].isspace():
-                ini += 1
-            while fim > ini and texto_pagina[fim - 1].isspace():
-                fim -= 1
-
-            if ini < fim:
-                fragmentos[i].append((ini - off, fim - off))
-
-    return fragmentos
+    return mapa
 
 
-def _preparar_linha(linha, chars, fragmentos):
+def _trocas_da_pagina(linhas, palavras_texto, offset, substituicoes):
+    """
+    Para cada linha, [(ini, fim, token_novo), ...] (índices em chars),
+    com base nos ids globais das palavras censuradas.
+    Devolve (trocas_por_linha, nao_mapeadas).
+    """
+    # Palavras do rawdict, pela mesma ordem do texto.
+    refs = []        # (índice da linha, ini, fim)
+    palavras_pdf = []
+
+    for li, (_, chars) in enumerate(linhas):
+        for ini, fim in _palavras_da_linha(chars):
+            refs.append((li, ini, fim))
+            palavras_pdf.append("".join(c["c"] for c, _ in chars[ini:fim]))
+
+    mapa = _alinhar(palavras_texto, palavras_pdf)
+
+    trocas = [[] for _ in linhas]
+    nao_mapeadas = 0
+
+    for t in range(len(palavras_texto)):
+        novo = substituicoes.get(offset + t)
+
+        if novo is None:
+            continue
+
+        if mapa[t] is None:
+            nao_mapeadas += 1
+            continue
+
+        li, ini, fim = refs[mapa[t]]
+        trocas[li].append((ini, fim, novo))
+
+    for lista in trocas:
+        lista.sort()
+
+    return trocas, nao_mapeadas
+
+
+def _preparar_linha(linha, chars, trocas):
     """
     Calcula o retângulo a apagar e os desenhos a fazer numa linha.
     desenho = (texto, x, y, fonte, tamanho, cor)
     """
-    a0 = fragmentos[0][0]
+    a0 = trocas[0][0]
     primeiro_c, primeiro_span = chars[a0]
     x0 = primeiro_c["bbox"][0]
     oy = primeiro_c["origin"][1]
@@ -171,8 +159,8 @@ def _preparar_linha(linha, chars, fragmentos):
                 _cor(span["color"]),
             ))
 
-    for ini, fim in fragmentos:
-        # Texto entre o fragmento anterior e este.
+    for ini, fim, novo in trocas:
+        # Texto entre a troca anterior e esta.
         copiar(pos, ini)
 
         c_ini, span_ini = chars[ini]
@@ -181,14 +169,12 @@ def _preparar_linha(linha, chars, fragmentos):
         tam_m = span_ini["size"]
         x_ini = c_ini["bbox"][0] + delta
 
-        texto_frag = "".join(c["c"] for c, _ in chars[ini:fim])
-        ast = _asteriscos_texto(texto_frag)
         largura_nova = fitz.get_text_length(
-            ast, fontname=fonte, fontsize=tam_m
+            novo, fontname=fonte, fontsize=tam_m
         )
 
         desenhos.append((
-            ast,
+            novo,
             x_ini,
             c_ini["origin"][1],
             fonte,
@@ -199,7 +185,7 @@ def _preparar_linha(linha, chars, fragmentos):
         delta = x_ini + largura_nova - c_fim["bbox"][2]
         pos = fim
 
-    # Resto da linha depois do último fragmento.
+    # Resto da linha depois da última troca.
     copiar(pos, len(chars))
 
     return retangulo, desenhos
@@ -208,13 +194,18 @@ def _preparar_linha(linha, chars, fragmentos):
 def substituir_informacoes_sensiveis(
     pdf_entrada,
     pdf_saida,
-    informacoes_sensiveis,
+    substituicoes,
 ):
     """
-    Troca cada palavra sensível por '*' (um asterisco por palavra, com
-    um só espaço entre eles). O resto da linha é redesenhado caractere a
-    caractere, nas posições originais deslocadas para a esquerda, por isso
-    não há espaços a mais nem sobreposições.
+    Troca no PDF exatamente as palavras que o submission.txt troca.
+
+    substituicoes: {id_global_da_palavra: token_novo}, ex.: {5: '*', 12: '(*)'}
+    (ver redact_text.substituicoes_por_id). Os ids contam as palavras de
+    pagina.get_text().split() ao longo de todas as páginas, como no prompt.
+
+    O resto da linha é redesenhado caractere a caractere, nas posições
+    originais deslocadas para a esquerda, por isso não há espaços a mais
+    nem sobreposições.
     """
     caminho_entrada = Path(pdf_entrada).expanduser().resolve()
     caminho_saida = Path(pdf_saida).expanduser().resolve()
@@ -232,9 +223,10 @@ def substituir_informacoes_sensiveis(
 
     caminho_saida.parent.mkdir(parents=True, exist_ok=True)
 
-    padrao = criar_padrao(informacoes_sensiveis)
-
     total = 0
+    palavras_trocadas = 0
+    por_mapear = 0
+    offset = 0
 
     print(
         "A abrir o PDF para substituir as informações sensíveis...",
@@ -250,18 +242,24 @@ def substituir_informacoes_sensiveis(
                 flush=True,
             )
 
+            palavras_texto = pagina.get_text().split()
+
             # Cada elemento: (retângulo a apagar, lista de desenhos)
             trabalho = []
 
-            if padrao is not None:
+            if substituicoes:
                 linhas = _linhas_da_pagina(pagina)
-                fragmentos = _fragmentos_por_linha(linhas, padrao)
+                trocas, nao_mapeadas = _trocas_da_pagina(
+                    linhas, palavras_texto, offset, substituicoes
+                )
+                por_mapear += nao_mapeadas
 
-                for (linha, chars), frags in zip(linhas, fragmentos):
-                    if frags:
-                        trabalho.append(
-                            _preparar_linha(linha, chars, frags)
-                        )
+                for (linha, chars), tr in zip(linhas, trocas):
+                    if tr:
+                        palavras_trocadas += len(tr)
+                        trabalho.append(_preparar_linha(linha, chars, tr))
+
+            offset += len(palavras_texto)
 
             for retangulo, _ in trabalho:
                 pagina.add_redact_annot(
@@ -297,8 +295,16 @@ def substituir_informacoes_sensiveis(
             deflate=True,
         )
 
+    if por_mapear:
+        print(
+            f"Aviso: {por_mapear} palavra(s) censurada(s) no texto não "
+            f"foram encontradas no PDF e ficaram por censurar.",
+            flush=True,
+        )
+
     print(
-        f"Total de linhas alteradas: {total}",
+        f"Palavras censuradas no PDF: {palavras_trocadas} "
+        f"(em {total} linha(s)).",
         flush=True,
     )
     print(
