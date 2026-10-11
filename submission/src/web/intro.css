@@ -25,12 +25,16 @@
   --warm: 255 199 125;                                 /* cor da luz */
   /* Scroll que a saída ocupa: o palco fica preso ao ecrã enquanto o texto é
      apagado, a luz se apaga e o candeeiro sobe (intro.js, setupExit). */
-  --exit: 85vh;
+  --exit: 45vh;
 
   position: relative;
   flex: none;
-  height: calc(max(100vh, 540px) + var(--exit));
-  height: calc(max(100svh, 540px) + var(--exit));
+  /* Depois da saída o palco fica preso mais um ecrã, e a página inicial sobe
+     por cima dele (a margem negativa puxa-a para aí). */
+  height: calc(max(100vh, 540px) + var(--exit) + 100vh);
+  height: calc(max(100svh, 540px) + var(--exit) + 100svh);
+  margin-bottom: -100vh;
+  margin-bottom: -100svh;
   color: var(--chalk);
   -webkit-user-select: none;   /* arrastar a lupa não deve selecionar texto */
   user-select: none;

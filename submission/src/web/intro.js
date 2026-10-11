@@ -339,22 +339,26 @@ function setupExit(blocks) {
 
   function apply() {
     if (!intro.classList.contains('ready')) return;
-    const room = intro.offsetHeight - stage.offsetHeight;
+    // O percurso da saída (--exit); o resto do scroll do palco é a página
+    // inicial a subir por cima dele.
+    const room = intro.offsetHeight - stage.offsetHeight - innerHeight;
     const p = room > 0 ? Math.min(Math.max(scrollY / room, 0), 1) : 0;
-    if (p === last) return;
-    last = p;
+    if (scrollY === last) return;
+    last = scrollY;
 
     intro.classList.toggle('leaving', p > 0);
     intro.style.setProperty('--out', p.toFixed(4));
-    intro.style.setProperty('--dim', smooth((p - 0.3) / 0.4).toFixed(4));
-    intro.style.setProperty('--fade', smooth((p - 0.65) / 0.35).toFixed(4));
-    const rise = Math.min(Math.max((p - 0.5) / 0.45, 0), 1);
+    intro.style.setProperty('--dim', smooth((p - 0.35) / 0.5).toFixed(4));
+    intro.style.setProperty('--fade', smooth((p - 0.7) / 0.3).toFixed(4));
+    // O candeeiro só sobe quando a luz já se apagou, enquanto a página
+    // inicial entra: leva meio ecrã de scroll.
+    const rise = Math.min(Math.max((scrollY - room * 0.85) / (innerHeight * 0.5), 0), 1);
     if (p > 0) lamp.style.setProperty('--k', (1 - rise * rise).toFixed(4));
     else lamp.style.removeProperty('--k');
 
     // Apagar do fim para o princípio: primeiro a frase, depois o título.
     const glyphs = blocks.flatMap(el => [...el.querySelectorAll('.ch, .cz-star')]);
-    const keep = Math.round(glyphs.length * (1 - Math.min(p / 0.55, 1)));
+    const keep = Math.round(glyphs.length * (1 - Math.min(p / 0.6, 1)));
     glyphs.forEach((g, i) => g.classList.toggle('gone', i >= keep));
     if (p === 0 || !glyphs.length) caret.remove();
     else if (keep > 0) glyphs[keep - 1].after(caret);
@@ -436,7 +440,7 @@ try {
     ? 'Passa a lupa por cima de um * para veres o que ficou escondido.'
     : 'Toca num * para veres o que ficou escondido.';
   intro.querySelector('.intro-cue').addEventListener('click', () => {
-    scrollTo({ top: intro.offsetHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
+    scrollTo({ top: intro.offsetHeight - innerHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
   });
 
   const onReady = [setupExit([titleEl, lineEl])];

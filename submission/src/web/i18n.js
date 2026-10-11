@@ -8,8 +8,9 @@
  *
  * Fica por traduzir o que é conteúdo e não interface: os documentos
  * carregados, as categorias que o Gemini devolve e as mensagens de erro do
- * servidor. A frase do ecrã de boas-vindas é trocada por intro.js, que ouve o
- * evento "langchange".
+ * servidor. A frase do ecrã de boas-vindas e o lema da página inicial são
+ * trocados por quem os escreve letra a letra (intro.js e index.html), que
+ * ouvem o evento "langchange".
  */
 (() => {
 'use strict';
@@ -45,8 +46,6 @@ const EXACT = {
   'Altura': 'Height',
   '· Peso': '· Weight',
   // página inicial
-  'Esconde o que é pessoal.': 'Hide what is personal.',
-  'Mantém o que importa.': 'Keep what matters.',
   'Carrega um PDF e escolhe o que fica escondido.': 'Upload a PDF and choose what stays hidden.',
   'Carregar ficheiros PDF ou um ZIP': 'Upload PDF files or a ZIP',
   'Larga aqui os teus PDF': 'Drop your PDFs here',
@@ -157,7 +156,7 @@ const RULES = [
 const BACK = Object.fromEntries(Object.entries(EXACT).map(([pt, en]) => [en, pt]));
 const ATTRS = ['placeholder', 'aria-label', 'title', 'alt', 'data-ref'];
 // Conteúdo, não interface: nunca se traduz.
-const SKIP = 'script, style, #paper, .chips, td.word, .t-name, .s-head .grow, .intro-title, .intro-line, .sr-only, .file-name, .file-desc, #fname, .tab .name, .lens, .tip small';
+const SKIP = 'script, style, #paper, .chips, td.word, .t-name, .s-head .grow, .intro-title, .intro-line, .hero h1, .sr-only, .file-name, .file-desc, #fname, .tab .name, .lens, .tip small';
 
 let lang = 'pt';
 try { if (localStorage.getItem('lang') === 'en') lang = 'en'; } catch { /* sem storage */ }

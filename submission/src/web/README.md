@@ -58,6 +58,21 @@ The English version of each element goes in `data-en`:
 The site name (Anonimizator; Anonymizator in English) lives in `.intro-title`,
 in `.brand` (top bar), in `<title>` and in `i18n.js`.
 
+## Landing page entrance
+
+Each piece of the landing page waits off stage and enters when it reaches the
+screen: the slogan is typed letter by letter like the welcome screen, the drop
+zone fades in, and the folder slides in from the right while its cover falls
+open and the sheets rise out of it. Scrolling back up to the welcome screen
+resets everything, so the entrance plays again. Hovering the folder makes it
+zoom slightly and fan its sheets out.
+
+`setupEntrance()` in `index.html` only switches `data-enter` from `wait` to
+`go` on each piece; the animations themselves are CSS keyframes (`enter-fade`,
+`folder-in`, `cover-open`, `sheet-up`). With "reduce motion" enabled, nothing
+waits. The slogan is the `<h1>` of `.hero`, with its English version in
+`data-en`, like the welcome text.
+
 The magnifier is drawn in SVG by `lupaRays()` in `lupa.js`, with measurements
 taken from the original image (36 rays and the handle). The lamp's fall is the
 function `lampAt(t)`, with its constants right above it.

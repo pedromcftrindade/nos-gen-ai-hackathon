@@ -103,8 +103,15 @@ body:not([data-phase="landing"]) #landing { display: none; }
   position: sticky; top: 0; z-index: 30;
   background: color-mix(in srgb, var(--bg) 84%, transparent);
   -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid transparent;
+  overflow-x: clip;
 }
+/* --in (0 a 1) é a entrada da barra, levada pelo scroll (setupHeader): a
+   linha cresce do meio para os lados, o nome vem da esquerda e os botões da
+   direita. Sem JavaScript vale 1: tudo no sítio. */
+.top::after { content: ""; position: absolute; inset: auto 0 -1px; height: 1px; background: var(--line); transform: scaleX(var(--in, 1)); }
+.top .brand { transform: translateX(calc((var(--in, 1) - 1) * 32vw)); opacity: var(--in, 1); }
+.top .top-r { transform: translateX(calc((1 - var(--in, 1)) * 32vw)); opacity: var(--in, 1); }
 .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; color: inherit; text-decoration: none; background: none; border: 0; padding: 0; }
 .mark { width: 30px; height: 30px; border-radius: 9px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font: 700 24px/1 var(--serif); padding-top: 7px; }
@@ -133,7 +140,7 @@ body:not([data-phase="landing"]) #landing { display: none; }
 
 /* ---------- Página inicial ---------- */
 /* O detetive (detective.js) entra e sai pelas laterais de #landing. */
-#landing { position: relative; overflow: hidden; overflow: clip; }
+#landing { position: relative; overflow: hidden; overflow: clip; background: var(--bg); }   /* opaco: sobe por cima do ecrã de boas-vindas */
 .hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: clamp(28px, 5vw, 72px); align-items: center; min-height: calc(100vh - 61px); min-height: calc(100svh - 61px);
   /* a faixa de baixo fica livre para o detetive */
   padding: clamp(24px, 4vw, 48px) 0 clamp(56px, 10vh, 96px); }
@@ -149,10 +156,17 @@ h1 em { font-style: italic; color: var(--accent); }
 .under { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; margin: 16px 4px 0; color: var(--ink-3); font-size: 12.5px; }
 
 /* O exemplo: um bloco de notas preso com um clip, dentro de uma pasta. */
-.folder { position: relative; justify-self: center; width: 100%; max-width: 440px; padding: 30px 24px 18px; border-radius: 0 14px 10px 10px; background: var(--folder-back); box-shadow: var(--shadow); transform: rotate(1.6deg); }
+.folder { position: relative; justify-self: center; width: 100%; max-width: 440px; padding: 30px 24px 18px; border-radius: 0 14px 10px 10px; background: var(--folder-back); box-shadow: var(--shadow); transform: rotate(1.6deg); transition: transform .35s cubic-bezier(.3, 1.3, .4, 1), box-shadow .35s; }
 .folder::before { content: ""; position: absolute; left: 0; bottom: calc(100% - 1px); width: 44%; height: 22px; border-radius: 10px 0 0 0; background: var(--folder-back); clip-path: polygon(0 0, 84% 0, 100% 100%, 0 100%); }   /* a aba */
 .folder::after { content: ""; position: absolute; inset: auto 0 0; z-index: 2; height: 76px; border-radius: 0 0 10px 10px; background: var(--folder-front); box-shadow: 0 -1px 0 rgb(0 0 0 / .14), inset 0 1px 0 rgb(255 255 255 / .22); }   /* a frente, por cima do bloco */
-.spec { position: relative; z-index: 1; padding: 2.5em 22px 78px 50px; border-radius: 5px 5px 0 0; color: var(--paper-ink); font: 16px/2 var(--serif); transform: rotate(-2.2deg); box-shadow: 0 2px 10px -4px rgb(0 0 0 / .35);
+/* O que está dentro da pasta. O recorte só corta em baixo: na entrada, as
+   folhas sobem de dentro da pasta. */
+.sheets { position: relative; z-index: 1; clip-path: inset(-90px -90px 0 -90px); }
+.leaf { position: absolute; border-radius: 3px; box-shadow: 0 2px 8px -4px rgb(0 0 0 / .4); transition: transform .35s cubic-bezier(.3, 1.3, .4, 1);
+  background: linear-gradient(transparent calc(100% - 1px), var(--rule) 0) 0 14px / 100% 22px, color-mix(in srgb, var(--paper) 93%, var(--ink)); }
+.leaf:nth-child(1) { inset: -4px 10px 24px -6px; transform: rotate(3.4deg); }
+.leaf:nth-child(2) { inset: 2px -8px 24px 12px; transform: rotate(-5.2deg); }
+.spec { position: relative; z-index: 1; padding: 2.5em 22px 78px 50px; border-radius: 5px 5px 0 0; color: var(--paper-ink); font: 16px/2 var(--serif); transform: rotate(-2.2deg); box-shadow: 0 2px 10px -4px rgb(0 0 0 / .35); transition: transform .35s cubic-bezier(.3, 1.3, .4, 1);
   /* a margem vermelha e as linhas do papel, uma por cada linha de texto */
   background:
     linear-gradient(90deg, transparent 37px, color-mix(in srgb, var(--accent) 38%, transparent) 37px 38px, transparent 38px),
@@ -163,6 +177,41 @@ h1 em { font-style: italic; color: var(--accent); }
 .spec .row { white-space: nowrap; overflow: hidden; text-overflow: clip; }
 .spec .sp { border-radius: 3px; padding: 1px 3px; margin: 0 -3px; background: var(--c-tint); box-shadow: inset 0 -2px 0 var(--c-solid); transition: background .3s; font-weight: 600; }
 .clip { position: absolute; top: -20px; right: 34px; z-index: 3; width: 24px; fill: none; stroke: #9a9aa2; stroke-width: 2; stroke-linecap: round; transform: rotate(7deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+/* A capa: só se vê na entrada, a pasta chega fechada e ela cai para a frente. */
+.folder-cover { position: absolute; inset: 0; z-index: 4; visibility: hidden; border-radius: 0 14px 10px 10px; background: var(--folder-front); box-shadow: inset 0 1px 0 rgb(255 255 255 / .22); transform-origin: 50% 100%; }
+/* Com o rato por cima, a pasta destaca-se e as folhas abrem em leque. */
+@media (hover: hover) {
+  .folder:hover { transform: rotate(0deg) scale(1.05); box-shadow: 0 1px 0 rgb(0 0 0 / .05), 0 36px 56px -26px rgb(0 0 0 / .55); }
+  .folder:hover .spec { transform: rotate(-1deg) translateY(-10px); }
+  .folder:hover .leaf:nth-child(1) { transform: rotate(6.5deg) translateY(-12px); }
+  .folder:hover .leaf:nth-child(2) { transform: rotate(-8.5deg) translateY(-8px); }
+}
+
+/* A entrada. setupEntrance() deixa cada peça à espera (data-enter="wait") e
+   solta-a ("go") quando ela chega ao ecrã: o lema é escrito letra a letra, a
+   zona de carregamento aparece e a pasta vem da direita, a abrir-se. Sem
+   JavaScript ou com "reduzir movimento", nada fica à espera. */
+[data-enter="wait"] { visibility: hidden; }
+h1 .tw { white-space: nowrap; }   /* uma palavra não se parte a meio, nem no cursor */
+h1 .tc { visibility: hidden; }
+h1 .tc.on { visibility: visible; }
+h1 .caret::after { background: var(--accent); }
+:is(.lede, .drop, .under)[data-enter="go"] { animation: enter-fade .8s cubic-bezier(.2, .7, .2, 1) backwards; }
+.drop[data-enter="go"] { animation-delay: .12s; }
+.under[data-enter="go"] { animation-delay: .3s; }
+@keyframes enter-fade { from { opacity: 0; transform: translateY(18px); } }
+.folder[data-enter="go"] { animation: folder-in .95s cubic-bezier(.2, .85, .25, 1) backwards; }
+@keyframes folder-in { from { transform: translateX(min(80vw, 900px)) rotate(10deg); } }
+.folder[data-enter="go"] .folder-cover { animation: cover-open .6s .3s cubic-bezier(.45, 0, .9, .6) backwards; }
+@keyframes cover-open {
+  from { visibility: visible; transform: perspective(1800px) rotateX(0deg); }
+  90% { opacity: 1; }
+  to { visibility: visible; opacity: 0; transform: perspective(1800px) rotateX(-89deg); filter: brightness(.78); }
+}
+.folder[data-enter="go"] :is(.leaf, .spec) { animation: sheet-up .7s .5s cubic-bezier(.3, 1.2, .4, 1) backwards; }
+.folder[data-enter="go"] .leaf:nth-child(2) { animation-delay: .6s; }
+.folder[data-enter="go"] .spec { animation-delay: .7s; }
+@keyframes sheet-up { from { transform: translateY(78%); } }
 
 /* ---------- Área de trabalho ---------- */
 .wh { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding: 26px 0 18px; }
@@ -369,6 +418,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 @media (max-width: 680px) {
   /* As linhas do bloco não partem: em ecrãs estreitos, encolhe-o para caber. */
   .folder { padding: 26px 12px 16px; }
+  .leaf:nth-child(1) { inset: -3px 4px 24px 0; transform: rotate(2deg); }
+  .leaf:nth-child(2) { inset: 2px 0 24px 6px; transform: rotate(-3.6deg); }
   .spec { padding-right: 10px; padding-left: 46px; font-size: clamp(12px, 3.7vw, 16px); }
   .tiles { grid-template-columns: 1fr 1fr; }
   .pill span { display: none; }
@@ -457,7 +508,7 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
  <div class="wrap">
   <section class="hero">
     <div>
-      <h1>Esconde o que é pessoal.<br><em>Mantém o que importa.</em></h1>
+      <h1 data-en="Hide what is personal.&lt;br&gt;&lt;em&gt;Keep what matters.&lt;/em&gt;">Esconde o que é pessoal.<br><em>Mantém o que importa.</em></h1>
       <p class="lede">Carrega um PDF e escolhe o que fica escondido.</p>
 
       <div class="drop" id="drop" tabindex="0" role="button" aria-label="Carregar ficheiros PDF ou um ZIP">
@@ -473,6 +524,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     </div>
 
     <div class="folder" aria-hidden="true">
+     <div class="sheets">
+      <i class="leaf"></i><i class="leaf"></i>
       <div class="spec" id="spec">
         <svg class="clip" viewBox="0 0 26 58"><path d="M18 16v26a5 5 0 0 1-10 0V11a8 8 0 0 1 16 0v33a11 11 0 0 1-22 0V18"/></svg>
         <h4>Relatório de Admissão</h4>
@@ -482,6 +535,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
         <div class="row">Cartão: <span class="sp hue" style="--h:283" data-t="4111 2222 3333 4444">4111 2222 3333 4444</span></div>
         <div class="row">Altura <span class="sp hue" style="--h:198" data-t="1,68m">1,68m</span> · Peso <span class="sp hue" style="--h:198" data-t="72kg">72kg</span></div>
       </div>
+     </div>
+     <i class="folder-cover"></i>
     </div>
   </section>
  </div>
@@ -1431,7 +1486,8 @@ function reset(toTop = false) {
   S.doc = null;
   setPhase('landing');
   $('#file').value = '';
-  window.scrollTo({ top: toTop ? 0 : $('#intro').offsetHeight });
+  window.scrollTo({ top: toTop ? 0 : $('#landing').offsetTop - $('.top').offsetHeight });
+  checkEntrance(true);
 }
 
 /* =====================================================================
@@ -1547,6 +1603,105 @@ function startSpecimen() {
   }, 2800);
 }
 
+// A entrada da página inicial (as animações estão no CSS, em data-enter).
+// Cada peça fica à espera e entra quando chega ao ecrã; o lema é escrito
+// letra a letra, como no ecrã de boas-vindas. Voltar a esse ecrã repõe tudo,
+// para a entrada se repetir. checkEntrance(true) repete-a de imediato.
+let checkEntrance = () => {};
+
+function setupEntrance() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const h1 = $('.hero h1');
+  const parts = [h1, $('.lede'), $('#drop'), $('.under'), $('.folder')];
+  // O lema existe nas duas línguas: a portuguesa no HTML, a inglesa em data-en.
+  const slogan = { pt: h1.innerHTML, en: h1.dataset.en || h1.innerHTML };
+  const caret = el('span', { class: 'caret' });
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  let chars = [];
+  let run = 0;   // muda a cada entrada ou reposição: a escrita anterior para
+
+  // Parte o lema em letras (.tc), agrupadas por palavra (.tw).
+  function split() {
+    h1.innerHTML = document.documentElement.lang === 'en' ? slogan.en : slogan.pt;
+    const nodes = [];
+    const it = document.createTreeWalker(h1, NodeFilter.SHOW_TEXT);
+    for (let node = it.nextNode(); node; node = it.nextNode()) nodes.push(node);
+    chars = [];
+    for (const node of nodes) {
+      node.replaceWith(...node.data.split(/(\s+)/).filter(Boolean).map(bit => {
+        if (!bit.trim()) return bit;
+        const letters = [...bit].map(c => el('span', { class: 'tc' }, c));
+        chars.push(...letters);
+        return el('span', { class: 'tw' }, letters);
+      }));
+    }
+    h1.setAttribute('aria-label', nodes.map(node => node.data.trim()).join(' '));
+  }
+
+  async function type() {
+    const mine = ++run;
+    for (const ch of chars) {
+      ch.classList.add('on');
+      ch.after(caret);
+      await wait(/[.,;:!?]/.test(ch.textContent) ? 260 : 16 + Math.random() * 26);
+      if (mine !== run) return;
+    }
+    await wait(1400);
+    if (mine === run) caret.remove();
+  }
+
+  function rewind() {
+    ++run;
+    caret.remove();
+    for (const ch of chars) ch.classList.remove('on');
+    for (const part of parts) part.dataset.enter = 'wait';
+  }
+
+  checkEntrance = (again = false) => {
+    if (S.phase !== 'landing') return;
+    const below = $('#landing').getBoundingClientRect().top >= innerHeight;
+    if (again || (below && parts.some(part => part.dataset.enter === 'go'))) rewind();
+    if (below) return;
+    for (const part of parts) {
+      if (part.dataset.enter !== 'wait') continue;
+      // Entra quando já se vê um bom bocado dela, não só a ponta.
+      const box = part.getBoundingClientRect();
+      if (box.top + Math.min(box.height * 0.35, 140) > innerHeight) continue;
+      part.dataset.enter = 'go';
+      if (part === h1) type();
+    }
+  };
+
+  // Ao trocar de língua, o lema é reescrito no estado em que estava.
+  addEventListener('langchange', () => {
+    ++run;
+    caret.remove();
+    split();
+    if (h1.dataset.enter === 'go') for (const ch of chars) ch.classList.add('on');
+  });
+  addEventListener('scroll', () => checkEntrance(), { passive: true });
+  addEventListener('resize', () => checkEntrance());
+  split();
+  rewind();
+  checkEntrance();
+}
+
+// A barra de topo entra com o scroll: enquanto sobe do fundo do ecrã até
+// meio, --in vai de 0 a 1 (em ease-in). Fora da página inicial fica em 1.
+function setupHeader() {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const top = $('.top');
+  const apply = () => {
+    const seen = (innerHeight - top.getBoundingClientRect().top) / (innerHeight * 0.5);
+    const q = S.phase === 'landing' ? Math.min(Math.max(seen, 0), 1) : 1;
+    top.style.setProperty('--in', (q * q).toFixed(4));
+  };
+  addEventListener('scroll', apply, { passive: true });
+  addEventListener('resize', apply);
+  new MutationObserver(apply).observe(document.body, { attributes: true, attributeFilter: ['data-phase'] });
+  apply();
+}
+
 function setupLanding() {
   const drop = $('#drop');
   const input = $('#file');
@@ -1567,6 +1722,9 @@ function setupLanding() {
   });
   $('#sample').addEventListener('click', loadSample);
   startSpecimen();
+  // Só depois de i18n.js definir a língua, que é carregado a seguir.
+  addEventListener('DOMContentLoaded', setupEntrance);
+  setupHeader();
 }
 
 /* =====================================================================
