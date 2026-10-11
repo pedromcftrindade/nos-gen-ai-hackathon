@@ -21,14 +21,17 @@ from parser_aux import (
     validar_pares,
 )
 
+from collections import Counter
+
 
 def guardar_sensivel(pares):
-    """Guarda a lista de pares em sensitive_info.json, um par por linha."""
+    """Guarda a lista em sensitive_info.json, uma entrada por linha:
+    [palavra, id, categoria, subcategoria]."""
     SUBMISSION_DIR.mkdir(parents=True, exist_ok=True)
 
     linhas = [
-        "  " + json.dumps([palavra, i], ensure_ascii=False)
-        for palavra, i in pares
+        "  " + json.dumps([palavra, i, cat, sub], ensure_ascii=False)
+        for palavra, i, cat, sub in pares
     ]
 
     SENSITIVE_INFO_FILE.write_text(
@@ -39,13 +42,21 @@ def guardar_sensivel(pares):
 
 
 def carregar_sensivel():
-    """Lê sensitive_info.json -> [(palavra, id), ...] (opção --reuse)."""
-    return [
-        (palavra, int(i))
-        for palavra, i in json.loads(
-            SENSITIVE_INFO_FILE.read_text(encoding="utf-8")
-        )
-    ]
+    """Lê sensitive_info.json -> [(palavra, id, cat, sub), ...] (--reuse).
+    Aceita também ficheiros antigos com só 2 colunas."""
+    pares = []
+
+    for item in json.loads(
+        SENSITIVE_INFO_FILE.read_text(encoding="utf-8")
+    ):
+        if len(item) >= 4:
+            cat, sub = item[2], item[3]
+        else:
+            cat, sub = "", ""
+
+        pares.append((item[0], int(item[1]), cat, sub))
+
+    return pares
 
 
 def _analisar_parte(session, api_key, prompt, tokens, i, n):
@@ -112,8 +123,8 @@ def _analisar_parte(session, api_key, prompt, tokens, i, n):
 def processar_com_gemini(texto):
     """
     Envia o texto (palavras numeradas) ao Gemini e devolve a lista
-    ordenada de tuplos (palavra, id), sem duplicados e já validada
-    contra o texto.
+    ordenada de tuplos (palavra, id, categoria, subcategoria), sem
+    duplicados e já validada contra o texto.
     """
     api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -134,7 +145,7 @@ def processar_com_gemini(texto):
     print(f"Texto dividido em {numero_chunks} parte(s).", flush=True)
 
     respostas = []
-    resultado = set()
+    resultado = {}   # (palavra, id) -> (categoria, subcategoria)
 
     with requests.Session() as session:
         for i, chunk in enumerate(chunks, start=1):
@@ -155,7 +166,9 @@ def processar_com_gemini(texto):
             duracao = time.monotonic() - inicio
 
             respostas.append(resposta)
-            resultado.update(validos)
+
+            for palavra, id_, cat, sub in validos:
+                resultado.setdefault((palavra, id_), (cat, sub))
 
             if corrigidos:
                 print(
@@ -187,10 +200,24 @@ def processar_com_gemini(texto):
                 f"{resposta}\n\n"
             )
 
-    ordenado = sorted(resultado, key=lambda par: (par[1], par[0]))
+    ordenado = sorted(
+        (
+            (palavra, id_, cat, sub)
+            for (palavra, id_), (cat, sub) in resultado.items()
+        ),
+        key=lambda par: (par[1], par[0]),
+    )
 
     guardar_sensivel(ordenado)
 
     print(f"Respostas guardadas em: {RESPONSES_FILE}", flush=True)
+
+    # Etiquetas que o Gemini escreveu (são livres, por isso é útil ver).
+    contagem = Counter((cat, sub) for _, _, cat, sub in ordenado)
+
+    if contagem:
+        print("Categorias encontradas:", flush=True)
+        for (cat, sub), n in contagem.most_common():
+            print(f"  {cat or '-'} / {sub or '-'}: {n}", flush=True)
 
     return ordenado

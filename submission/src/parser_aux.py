@@ -58,11 +58,25 @@ def dividir_em_blocos(palavras, max_chars=MAX_CHARS):
 
     return chunks
 
+def palavras_do_valor(valor):
+    """'Rua das Flores, 12' -> ['Rua', 'das', 'Flores', '12']
+    (cada palavra sem a pontuação colada às pontas)."""
+    return [
+        p
+        for p in (w.strip(PONT_SEP) for w in valor.split())
+        if p
+    ]
+
+def _etiqueta(valor):
+    """Etiqueta tal como o Gemini a escreveu ('' se faltar)."""
+    return valor.strip() if isinstance(valor, str) else ""
 
 def converter_resposta_em_lista(resposta):
     """
     Converte a resposta JSON do Gemini numa lista de tuplos
-    (palavra, id). Entradas mal formadas são ignoradas com um aviso.
+    (palavra, id, categoria, subcategoria). Aceita entradas de 2
+    elementos (sem etiquetas) ou de 4. Entradas mal formadas são
+    ignoradas com um aviso.
     """
     texto = resposta.strip()
 
@@ -101,16 +115,19 @@ def converter_resposta_em_lista(resposta):
     for item in dados:
         if (
             isinstance(item, (list, tuple))
-            and len(item) == 2
+            and len(item) in (2, 4)
             and isinstance(item[0], str)
         ):
-            # Se o Gemini incluir pontuação colada ("ansiedade)", "2x/dia,"),
-            # retira-a para não ser apagada do texto.
-            palavra = item[0].strip().strip(PONT_SEP).strip()
+            # Valor com várias palavras: normaliza espaços e retira a
+            # pontuação colada a cada palavra ("Flores," -> "Flores").
+            palavra = " ".join(palavras_do_valor(item[0]))
+
+            cat = _etiqueta(item[2]) if len(item) == 4 else ""
+            sub = _etiqueta(item[3]) if len(item) == 4 else ""
 
             try:
                 if palavra:
-                    pares.append((palavra, int(item[1])))
+                    pares.append((palavra, int(item[1]), cat, sub))
                     continue
             except (TypeError, ValueError):
                 pass
@@ -128,47 +145,62 @@ def converter_resposta_em_lista(resposta):
 
 def validar_pares(pares, tokens, janela=3):
     """
-    Só aceita (palavra, id) se a palavra na posição 'id' for mesmo essa
-    palavra (ignorando pontuação colada). Se o id vier deslocado até
-    'janela' posições, corrige-o para a posição certa mais próxima.
-    Devolve (válidos, corrigidos, descartados).
+    Só aceita (valor, id) se as palavras do valor estiverem mesmo nas
+    posições id, id+1, id+2... (ignorando pontuação colada). Se o id vier
+    deslocado até 'janela' posições, corrige-o para a posição certa mais
+    próxima (o valor inteiro desloca-se). As etiquetas acompanham cada par.
+    Devolve (válidos, corrigidos, descartados), onde os válidos são
+    tuplos (valor, id, categoria, subcategoria).
     """
 
-    def casa(palavra, j):
-        return 0 <= j < len(tokens) and any(
-            chave and palavra == chave
-            for chave, _, _ in variantes_token(tokens[j])
+    def casa(palavras, j):
+        return (
+            j >= 0
+            and j + len(palavras) <= len(tokens)
+            and all(
+                any(
+                    chave and palavra == chave
+                    for chave, _, _ in variantes_token(tokens[j + k])
+                )
+                for k, palavra in enumerate(palavras)
+            )
         )
 
     validos = []
     corrigidos = []
     descartados = []
 
-    for palavra, i in pares:
-        if casa(palavra, i):
-            validos.append((palavra, i))
+    for valor, i, cat, sub in pares:
+        palavras = palavras_do_valor(valor)
+
+        if casa(palavras, i):
+            validos.append((valor, i, cat, sub))
             continue
 
         for d in range(1, janela + 1):
             achado = next(
-                (j for j in (i - d, i + d) if casa(palavra, j)), None
+                (j for j in (i - d, i + d) if casa(palavras, j)), None
             )
 
             if achado is not None:
-                validos.append((palavra, achado))
-                corrigidos.append((palavra, i, achado))
+                validos.append((valor, achado, cat, sub))
+                corrigidos.append((valor, i, achado))
                 break
         else:
-            descartados.append((palavra, i))
+            descartados.append((valor, i))
 
     return validos, corrigidos, descartados
 
-
 def lista_para_dict(pares):
-    """[(palavra, id), ...] -> {palavra: {ids}} (usado por FinalText)."""
+    """
+    [(valor, id, ...), ...] -> {palavra: {ids}} (usado por FinalText).
+    Um valor com várias palavras é expandido: a palavra k do valor fica
+    na posição id + k, e cada uma vira um '*'.
+    """
     d = {}
 
-    for palavra, i in pares:
-        d.setdefault(palavra, set()).add(i)
+    for valor, i, *_ in pares:
+        for k, palavra in enumerate(palavras_do_valor(valor)):
+            d.setdefault(palavra, set()).add(i + k)
 
     return d

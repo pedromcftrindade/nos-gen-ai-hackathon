@@ -1,59 +1,59 @@
-Relatório de Admissão - Centro Médico Lisboa 
-Data: 15 de abril de 2025 
-Referência: ADM-2025-04-15-089 
-Informações do Paciente: 
-Nome: * * * *
-Data de Nascimento: *
-Sexo: *
-NIF: *
-Cartão de Cidadão: *
-Morada: * * *, *, * *, *, *
-Telefone: * * * *
-Email: *
-Número da Segurança Social: *
-Histórico Médico: 
-A paciente * *, * * de * anos, compareceu à consulta relatando * * *. Tem histórico de * e * *
-*, diagnosticada há 5 anos. É * * desde 2018, atualmente com * * * graças ao tratamento com
-antirretrovirais.
-A paciente relatou que sua família tem histórico de * * * (* * aos * *) e * * (* e * *).
-Exames genéticos realizados em 2022 indicaram * * * * * (* * *).
-Informações Sociais e Comportamentais: 
-Estado civil: *
-Filhos: * (*, * * e *, * *)
-Religião: * *
-Ocupação: * * na * * * * *
-Hábitos: * (* há * *), * * socialmente (2-3 doses por semana)
-Histórico de uso de substâncias: * * * * * em *
-Informações Financeiras: 
-Seguro de saúde: * * * *, apólice nº *
-Número do cartão de crédito: * * * * (validade *, CVV *)
-Rendimento anual declarado: *
-
-Dados Biométricos: 
-Impressão digital registrada no sistema: *
-Reconhecimento facial: *
-Altura: *
-Peso: *
-Tipo sanguíneo: *
-Pressão arterial na admissão: * *
-Notas da Consulta: 
-A paciente apresentou-se * durante a consulta, relatando problemas no * relativamente à elevada
-carga de responsabilidades que adquiriu. Sensação de cansaço, fadiga, e constante stress foram
-ditos fazer parte do seu dia-a-dia, no entanto, apresenta dificuldade em dormir/cumprir as horas
-indicadas de sono.
-Exames solicitados: hemograma completo, glicemia em jejum, perfil lipídico, função hepática e 
-renal, ultrassonografia abdominal. 
-Prescrição: Metformina 850mg 2x/dia, Losartana 50mg 1x/dia, Alprazolam 0,5mg (apenas em 
-caso de * * *).
-Contatos de Emergência: 
-Nome: * * (irmão)
-Telefone: *
-Email: *
-Nome: * * (* *)
-Telefone: *
-Assinatura Digital: 
-Dr. Carlos Mendes 
-CRM: 12345-PT 
-Especialidade: Medicina Interna 
-Email: carlos.mendes@centromedicalisboa.pt 
-Telefone: +351213456789 
+CONTACT
+Email
+* *
+GitHub
+*
+Location
+*, *
+Date of Birth
+* *, * (* years old)
+SKILLS
+Low-Level & Systems
+C / C++
+x86 Assembly
+RISC-V 32
+Web Development
+JavaScript / React
+HTML / CSS
+PHP
+General & Data
+Python
+Java
+SQL
+LANGUAGES
+* * * * *
+* * *
+OTHER
+Driver's License
+Category B (Light Vehicles)
+* * * * * * * * * * * * * * * * at * * * (*), maintaining an
+excellent academic record. I have a deep fascination for computer
+architecture, operating systems, and low-level programming. I am a
+dynamic individual, highly accustomed to teamwork through years of
+sports, and always eager to embrace new technical and personal
+challenges.
+Education
+BSc in Computer Science and Engineering
+* — Present
+* * * (*), * * *
+Current Grade Average: * / *
+Expected Graduation: * * * academic year
+Experience & Activities
+Cybersecurity Core Member
+Present
+* * * (*) * *
+Part of the university's cybersecurity team, focusing on vulnerability
+exploitation, system analysis, and sharing knowledge within the
+information security field.
+Volunteer
+* * * * *, *
+Assisted in the organization and logistics of one of the world's
+largest technology events, networking with industry professionals
+and further developing soft skills.
+Additional Education
+CS50: Introduction to Computer Science – Online course by
+* *, featuring a strong emphasis on C, Python, and data
+structures.
+* * * – Educational program attended in
+*, *.
+Interests & Hobbies

@@ -1,61 +1,70 @@
-Relatório de Admissão - Centro Médico Lisboa 
-Data: 15 de abril de 2025 
-Referência: ADM-2025-04-15-089 
-Informações do Paciente: 
-Nome: Maria Conceição Oliveira Santos 
-Data de Nascimento: 12/03/1978 
-Sexo: Feminino 
-NIF: 097865413 
-Cartão de Cidadão: 12345678-9ZX0 
-Morada: Rua das Flores, 123, Apt 45, Sacavém, Lisboa 
-Telefone: +351 912 345 678 
-Email: maria.santos@emailpessoal.pt 
-Número da Segurança Social: 11223344556 
-Histórico Médico: 
-A paciente Maria Santos, mulher caucasiana de 47 anos, compareceu à consulta relatando dores 
-abdominais intensas. Tem histórico de hipertensão e diabetes tipo 2, diagnosticada há 5 anos. É 
-HIV positivo desde 2018, atualmente com carga viral indetectável graças ao tratamento com 
-antirretrovirais. 
-A paciente relatou que sua família tem histórico de cancro da mama (mãe falecida aos 52 anos) 
-e doença cardíaca (pai e avô paterno). Exames genéticos realizados em 2022 indicaram 
-predisposição ao cancro de mama (mutação BRCA1 positiva). 
-Informações Sociais e Comportamentais: 
-Estado civil: Divorciada 
-Filhos: 2 (João, 15 anos e Ana, 12 anos) 
-Religião: Católica praticante 
-Ocupação: Professora universitária na Faculdade de Direito de Lisboa 
-Hábitos: Ex-fumante (parou há 3 anos), consome álcool socialmente (2-3 doses por semana) 
-Histórico de uso de substâncias: Tratamento para dependência de ansiolíticos em 2019 
-Informações Financeiras: 
-Seguro de saúde: Plano Premium Saúde Total, apólice nº 987654321 
-Número do cartão de crédito: 4111 2222 3333 4444 (validade 09/27, CVV 123) 
-Rendimento anual declarado: €62.500 
-
-Dados Biométricos: 
-Impressão digital registrada no sistema: ID-BIO-12345 
-Reconhecimento facial: FACE-ID-78901 
-Altura: 1,68m 
-Peso: 72kg 
-Tipo sanguíneo: O+ 
-Pressão arterial na admissão: 145/90 mmHg 
-Notas da Consulta: 
-A paciente apresentou-se ansiosa durante a consulta, relatando problemas no trabalho 
-relativamente à elevada carga de responsabilidades que adquiriu. Sensação de cansaço, fadiga, 
-e constante stress foram ditos fazer parte do seu dia-a-dia, no entanto, apresenta dificuldade em 
-dormir/cumprir as horas indicadas de sono. 
-Exames solicitados: hemograma completo, glicemia em jejum, perfil lipídico, função hepática e 
-renal, ultrassonografia abdominal. 
-Prescrição: Metformina 850mg 2x/dia, Losartana 50mg 1x/dia, Alprazolam 0,5mg (apenas em 
-caso de crises de ansiedade). 
-Contatos de Emergência: 
-Nome: António Santos (irmão) 
-Telefone: +351961234567 
-Email: antonio.santos@emailpessoal.pt 
-Nome: Joana Pereira (amiga próxima) 
-Telefone: +351939876543 
-Assinatura Digital: 
-Dr. Carlos Mendes 
-CRM: 12345-PT 
-Especialidade: Medicina Interna 
-Email: carlos.mendes@centromedicalisboa.pt 
-Telefone: +351213456789 
+CONTACT
+Email
+manuel.andre@tecnico.ulisbo
+a.pt
+GitHub
+github.com/manuelamma
+Location
+Lisbon, Portugal
+Date of Birth
+May 24, 2007 (19 years old)
+SKILLS
+Low-Level & Systems
+C / C++
+x86 Assembly
+RISC-V 32
+Web Development
+JavaScript / React
+HTML / CSS
+PHP
+General & Data
+Python
+Java
+SQL
+LANGUAGES
+Portuguese
+Native
+English
+Fluent
+Spanish
+Basic
+French
+Basic
+OTHER
+Driver's License
+Category B (Light Vehicles)
+Manuel Almeida Machado
+Morgado André
+Computer Science and Engineering Student
+2nd-year Computer Science and Engineering student at Instituto
+Superior Técnico (IST), maintaining an excellent academic record. I
+have a deep fascination for computer architecture, operating
+systems, and low-level programming. I am a dynamic individual,
+highly accustomed to teamwork through years of sports, and
+always eager to embrace new technical and personal challenges.
+Education
+BSc in Computer Science and Engineering
+2025 — Present
+Instituto Superior Técnico (IST), University of Lisbon
+Current Grade Average: 17.45 / 20
+Expected Graduation: End of 2026/2027 academic year
+Experience & Activities
+Cybersecurity Core Member
+Present
+Security Team Técnico (STT) - IST
+Part of the university's cybersecurity team, focusing on vulnerability
+exploitation, system analysis, and sharing knowledge within the
+information security field.
+Volunteer
+November 2025
+Web Summit 2025, Lisbon
+Assisted in the organization and logistics of one of the world's
+largest technology events, networking with industry professionals
+and further developing soft skills.
+Additional Education
+CS50: Introduction to Computer Science – Online course by
+Harvard University, featuring a strong emphasis on C, Python,
+and data structures.
+Estrelas do Futuro – Educational program attended in
+Coimbra, Portugal.
+Interests & Hobbies
