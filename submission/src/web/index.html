@@ -1,0 +1,1754 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Anonimizator</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231a1814'/%3E%3Ctext x='16' y='25' font-family='Georgia,serif' font-size='26' font-weight='700' text-anchor='middle' fill='%23f3f0e8'%3E*%3C/text%3E%3C/svg%3E">
+<script>
+// Aplicar o tema antes da primeira pintura (evita um flash).
+(function () {
+  var t = null;
+  try { t = localStorage.getItem('theme'); } catch (e) { /* sem storage */ }
+  if (t !== 'light' && t !== 'dark') {
+    t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.dataset.theme = t;
+})();
+</script>
+<style>
+:root {
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --bg: #f3f0e8;
+  --surface: #fffefa;
+  --surface-2: #f8f5ed;
+  --sunken: #ebe7da;
+  --paper: #fffefb;
+  --paper-ink: #1d1a15;
+  --ink: #1a1814;
+  --ink-2: #565044;
+  --ink-3: #857e70;
+  --line: #e3ddce;
+  --line-2: #d1cab6;
+  --accent: #e2411b;
+  --ok: #2b8a54;
+  --danger: #c0331b;
+  --warn: #a8670a;
+  --focus: 0 0 0 3px color-mix(in srgb, var(--accent) 38%, transparent);
+  --shadow: 0 1px 0 rgba(30, 20, 0, .04), 0 14px 32px -18px rgba(40, 30, 10, .28);
+
+  --folder-back: #d3b272; --folder-front: #e1c488; --rule: rgb(60 95 150 / .17);
+  --tint-l: 52%; --tint-a: .2; --strong-l: 31%; --strong-s: 78%; --solid-l: 50%;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #121110;
+  --surface: #1b1a18;
+  --surface-2: #23211e;
+  --sunken: #2a2824;
+  --paper: #211f1c;
+  --paper-ink: #ece7da;
+  --ink: #f3efe6;
+  --ink-2: #bdb6a6;
+  --ink-3: #8a8374;
+  --line: #34312b;
+  --line-2: #47433a;
+  --accent: #ff6a3d;
+  --ok: #4cc386;
+  --danger: #ff7a62;
+  --warn: #e8a64a;
+  --shadow: 0 1px 0 rgba(0, 0, 0, .3), 0 14px 32px -18px rgba(0, 0, 0, .7);
+
+  --folder-back: #54442a; --folder-front: #655232; --rule: rgb(170 195 240 / .12);
+  --tint-l: 62%; --tint-a: .24; --strong-l: 76%; --strong-s: 85%; --solid-l: 62%;
+  color-scheme: dark;
+}
+
+/* Cada categoria define --h (matiz) e herda estas cores. */
+.hue {
+  --c-tint: hsl(var(--h) 90% var(--tint-l) / var(--tint-a));
+  --c-strong: hsl(var(--h) var(--strong-s) var(--strong-l));
+  --c-solid: hsl(var(--h) 72% var(--solid-l));
+}
+.neutral {
+  --c-tint: color-mix(in srgb, var(--ink) 14%, transparent);
+  --c-strong: var(--ink);
+  --c-solid: var(--ink-2);
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+:focus-visible { outline: none; box-shadow: var(--focus); }
+.ico { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.wrap { width: 100%; max-width: 1380px; margin: 0 auto; padding: 0 clamp(16px, 3vw, 32px); }
+
+body[data-phase="landing"] #workspace { display: none; }
+body:not([data-phase="landing"]) #landing { display: none; }
+
+/* ---------- Barra de topo ---------- */
+.top {
+  position: sticky; top: 0; z-index: 30;
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; color: inherit; text-decoration: none; background: none; border: 0; padding: 0; }
+.mark { width: 30px; height: 30px; border-radius: 9px; background: var(--ink); color: var(--bg); display: grid; place-items: center; font: 700 24px/1 var(--serif); padding-top: 7px; }
+.top-r { display: flex; align-items: center; gap: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px; border: 1px solid var(--line); border-radius: 99px; font-size: 12.5px; color: var(--ink-2); background: var(--surface); white-space: nowrap; }
+.pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); }
+.pill.ok i { background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent); }
+.pill.warn i { background: var(--warn); }
+.icon-btn { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; color: var(--ink-2); }
+.icon-btn:hover { color: var(--ink); border-color: var(--line-2); }
+.lang-btn { font-size: 12.5px; font-weight: 700; letter-spacing: .04em; }
+
+/* ---------- Botões ---------- */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--surface); color: var(--ink); font-weight: 600; font-size: 14px; white-space: nowrap; transition: border-color .15s, background .15s, transform .1s; }
+.btn:hover:not(:disabled) { border-color: var(--ink-3); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover:not(:disabled) { background: color-mix(in srgb, var(--ink) 82%, var(--accent)); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); }
+.btn.ghost:hover:not(:disabled) { background: var(--sunken); border-color: transparent; }
+.link { background: none; border: 0; padding: 0; color: var(--ink); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 4px; }
+.link:hover { text-decoration-color: var(--accent); }
+.spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor; animation: spin .7s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Página inicial ---------- */
+/* O detetive (detective.js) entra e sai pelas laterais de #landing. */
+#landing { position: relative; overflow: hidden; overflow: clip; }
+.hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, .8fr); gap: clamp(28px, 5vw, 72px); align-items: center; min-height: calc(100vh - 61px); min-height: calc(100svh - 61px);
+  /* a faixa de baixo fica livre para o detetive */
+  padding: clamp(24px, 4vw, 48px) 0 clamp(56px, 10vh, 96px); }
+h1 { margin: 0 0 14px; font: 600 clamp(34px, 4.4vw, 54px)/1.05 var(--serif); letter-spacing: -.02em; }
+h1 em { font-style: italic; color: var(--accent); }
+.lede { margin: 0 0 28px; font-size: 17px; line-height: 1.6; color: var(--ink-2); }
+.drop { display: grid; justify-items: center; align-content: center; gap: 6px; min-height: clamp(220px, 36vh, 340px); padding: 40px 24px; text-align: center; border: 2px dashed var(--line-2); border-radius: 24px; background: var(--surface); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.drop:hover, .drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.drop.over { transform: scale(1.015); }
+.drop .ico { width: 46px; height: 46px; color: var(--accent); margin-bottom: 10px; stroke-width: 1.5; }
+.drop strong { font-size: 21px; }
+.drop span { color: var(--ink-3); font-size: 14.5px; }
+.under { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 20px; margin: 16px 4px 0; color: var(--ink-3); font-size: 12.5px; }
+
+/* O exemplo: um bloco de notas preso com um clip, dentro de uma pasta. */
+.folder { position: relative; justify-self: center; width: 100%; max-width: 440px; padding: 30px 24px 18px; border-radius: 0 14px 10px 10px; background: var(--folder-back); box-shadow: var(--shadow); transform: rotate(1.6deg); }
+.folder::before { content: ""; position: absolute; left: 0; bottom: calc(100% - 1px); width: 44%; height: 22px; border-radius: 10px 0 0 0; background: var(--folder-back); clip-path: polygon(0 0, 84% 0, 100% 100%, 0 100%); }   /* a aba */
+.folder::after { content: ""; position: absolute; inset: auto 0 0; z-index: 2; height: 76px; border-radius: 0 0 10px 10px; background: var(--folder-front); box-shadow: 0 -1px 0 rgb(0 0 0 / .14), inset 0 1px 0 rgb(255 255 255 / .22); }   /* a frente, por cima do bloco */
+.spec { position: relative; z-index: 1; padding: 2.5em 22px 78px 50px; border-radius: 5px 5px 0 0; color: var(--paper-ink); font: 16px/2 var(--serif); transform: rotate(-2.2deg); box-shadow: 0 2px 10px -4px rgb(0 0 0 / .35);
+  /* a margem vermelha e as linhas do papel, uma por cada linha de texto */
+  background:
+    linear-gradient(90deg, transparent 37px, color-mix(in srgb, var(--accent) 38%, transparent) 37px 38px, transparent 38px),
+    linear-gradient(transparent calc(100% - 1px), var(--rule) 0) 0 .5em / 100% 2em,
+    var(--paper); }
+.spec::before { content: ""; position: absolute; inset: 0 0 auto; height: 15px; border-radius: 5px 5px 0 0; background: var(--accent); }   /* a cola do bloco */
+.spec h4 { margin: 0; font: inherit; font-weight: 700; }
+.spec .row { white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.spec .sp { border-radius: 3px; padding: 1px 3px; margin: 0 -3px; background: var(--c-tint); box-shadow: inset 0 -2px 0 var(--c-solid); transition: background .3s; font-weight: 600; }
+.clip { position: absolute; top: -20px; right: 34px; z-index: 3; width: 24px; fill: none; stroke: #9a9aa2; stroke-width: 2; stroke-linecap: round; transform: rotate(7deg); filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+
+/* ---------- Área de trabalho ---------- */
+.wh { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; padding: 26px 0 18px; }
+.wh h2 { margin: 0; font: 600 26px/1.15 var(--serif); letter-spacing: -.01em; word-break: break-word; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 6px; color: var(--ink-3); font-size: 13px; }
+.tag { padding: 1px 8px; border-radius: 99px; background: var(--sunken); color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.wh-r { display: flex; flex-wrap: wrap; gap: 8px; }
+.tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 20px; }
+.tabs + .wh { padding-top: 14px; }
+.tab { display: inline-flex; align-items: center; gap: 8px; max-width: 240px; height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: var(--ink-2); font-size: 13.5px; font-weight: 600; }
+.tab:hover { border-color: var(--line-2); color: var(--ink); }
+.tab[aria-current="true"] { background: var(--surface); border-color: var(--ink-3); color: var(--ink); }
+.tab .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab .ico { width: 14px; height: 14px; stroke-width: 2.6; }
+.tab .ico.ok { color: var(--ok); }
+.tab .ico.bad { color: var(--danger); }
+.tab .spin { width: 13px; height: 13px; }
+.tab .wait { width: 8px; height: 8px; border-radius: 50%; background: var(--line-2); }
+.tabs .grow { flex: 1; }
+
+.ws { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 24px; align-items: start; padding-bottom: 72px; }
+.main { min-width: 0; }
+
+.status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 22px; margin-bottom: 14px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); font-size: 13.5px; color: var(--ink-2); }
+.status.error { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--ink); }
+.status.done { background: transparent; border-style: dashed; }
+.status .grow { flex: 1; min-width: 200px; }
+.st { display: inline-flex; align-items: center; gap: 8px; color: var(--ink-3); }
+.st .dot { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line-2); display: grid; place-items: center; }
+.st.active { color: var(--ink); font-weight: 600; }
+.st.active .dot { border: 0; }
+.st.done-s { color: var(--ink-2); }
+.st.done-s .dot { background: var(--ok); border-color: var(--ok); color: #fff; }
+.st.done-s .ico { width: 12px; height: 12px; stroke-width: 3; }
+.st time { font: 12px var(--mono); color: var(--ink-3); }
+.status .ico.bad { color: var(--danger); }
+.status .ico.ok { color: var(--ok); stroke-width: 2.6; }
+
+.bar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--sunken); }
+.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: 9px; font-weight: 600; font-size: 13.5px; color: var(--ink-2); }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .14); }
+.hint { color: var(--ink-3); font-size: 13px; }
+
+.paper { position: relative; max-width: 840px; margin: 0 auto; padding: clamp(24px, 5vw, 60px) clamp(18px, 5vw, 70px); background: var(--paper); color: var(--paper-ink); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); font: 16px/1.8 var(--serif); }
+.ln { min-height: 1.8em; overflow-wrap: anywhere; }
+.pg { position: relative; height: 0; margin: 26px 0; border-top: 1px dashed var(--line-2); text-align: center; }
+.pg span { position: relative; top: -9px; padding: 0 10px; background: var(--paper); color: var(--ink-3); font: 700 10.5px var(--font); letter-spacing: .1em; text-transform: uppercase; }
+.paper.loading .ln { animation: breathe 1.4s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .55; } }
+
+/* Com servidor, o documento é o próprio PDF: cada página é uma imagem e as
+   palavras são caixas transparentes por cima dela, nas posições reais. */
+.paper.pdf { max-width: 900px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.pdfpage { position: relative; margin-bottom: 18px; background: #fff; border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); overflow: hidden; }
+.pdfpage img { position: absolute; inset: 0; width: 100%; height: 100%; transition: opacity .2s; }
+.pdfpage .w { position: absolute; border-radius: 2px; }
+.pdfpage .w:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
+.pdfpage .w.f.off { outline: 1.5px dashed var(--c-solid); outline-offset: 1px; }
+html[lang="en"] .paper.pdf.busy::after { content: "Generating the preview…"; }
+/* Na vista anonimizada mostra-se o PDF final, tal como vai ser exportado. */
+.paper.pdf.anon .w { display: none; }
+.paper.pdf.busy img { opacity: .45; }
+.paper.pdf.busy::after { content: "A gerar a pré-visualização…"; position: sticky; bottom: 16px; display: block; width: max-content; margin: -52px auto 16px; padding: 8px 14px; border-radius: 99px; background: var(--ink); color: var(--bg); font: 600 13px var(--font); }
+
+.w { border-radius: 3px; transition: background .25s, box-shadow .25s, opacity .2s; }
+.w:hover { background: var(--sunken); cursor: pointer; }
+.w.f.on, .w.m.on { background: var(--c-tint); box-shadow: inset 0 -2px 0 var(--c-solid), 0 0 0 1px var(--c-tint); }
+.w.f.off { text-decoration: underline dotted var(--c-solid) 2px; text-underline-offset: 4px; }
+.w.f.on:hover, .w.m.on:hover { background: color-mix(in srgb, var(--c-solid) 34%, transparent); }
+.paper.sweeping .w { transition-delay: var(--d, 0ms); }
+.paper.focus .w:not(.spot) { opacity: .32; }
+.paper.focus .w.spot { outline: 2px solid var(--c-solid); outline-offset: 1px; }
+.paper.anon .w.on { font-family: var(--font); font-weight: 700; font-size: .95em; }
+
+.panel { position: sticky; top: 76px; display: flex; flex-direction: column; max-height: calc(100vh - 92px); overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
+.p-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 4px; }
+.p-head h3 { margin: 0; font-size: 15px; }
+.p-actions { display: flex; gap: 4px; }
+.mini { border: 0; background: transparent; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.mini:hover:not(:disabled) { background: var(--sunken); color: var(--ink); }
+.mini:disabled { opacity: .4; cursor: not-allowed; }
+.stat { padding: 6px 16px 14px; }
+.big { display: flex; align-items: baseline; gap: 8px; }
+.big b { font: 600 34px/1 var(--serif); letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.big span { color: var(--ink-3); font-size: 13px; }
+.meter { display: flex; gap: 2px; height: 10px; margin-top: 10px; border-radius: 99px; overflow: hidden; background: var(--sunken); }
+.meter i { display: block; min-width: 3px; background: var(--c-solid); transition: flex-grow .3s; }
+.search { position: relative; margin: 0 14px 6px; display: block; }
+.search .ico { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--ink-3); }
+.search input { width: 100%; height: 38px; padding: 0 12px 0 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2); outline: none; }
+.search input:focus { border-color: var(--accent); box-shadow: var(--focus); }
+.tree { flex: 1; overflow: auto; padding: 4px 8px 10px; }
+.empty { padding: 28px 16px; text-align: center; color: var(--ink-3); font-size: 13.5px; }
+.sk { height: 38px; margin: 6px 8px; border-radius: 10px; background: linear-gradient(100deg, var(--sunken) 30%, var(--surface-2) 50%, var(--sunken) 70%); background-size: 300% 100%; animation: shimmer 1.4s linear infinite; }
+@keyframes shimmer { to { background-position: -150% 0; } }
+
+.t-head { display: flex; align-items: center; gap: 9px; padding: 8px 8px; border-radius: 10px; cursor: pointer; user-select: none; }
+.t-head:hover { background: var(--surface-2); }
+.chev { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--ink-3); border-radius: 6px; }
+.chev .ico { width: 15px; height: 15px; transition: transform .15s; }
+.topic.open > .t-head .chev .ico { transform: rotate(90deg); }
+.t-name { flex: 1; min-width: 0; font-weight: 650; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sw { width: 10px; height: 10px; border-radius: 3px; background: var(--c-solid); flex: none; }
+.count { font: 12px var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.t-body { display: none; padding: 0 6px 10px 33px; }
+.topic.open > .t-body { display: block; }
+.sub { margin: 4px 0 10px; }
+.s-head { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12.5px; font-weight: 600; color: var(--ink-2); }
+.s-head .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 0 26px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px 2px 10px; border-radius: 99px; border: 1px dashed var(--c-solid); background: transparent; color: var(--ink-3); font-size: 12.5px; text-decoration: line-through; transition: background .15s, color .15s; }
+.chip:hover { color: var(--ink); }
+.chip small { font: 11px var(--mono); opacity: .75; }
+.chip.on { border-style: solid; border-color: transparent; background: var(--c-tint); color: var(--c-strong); text-decoration: none; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c-solid) 40%, transparent); }
+.chip .ico { width: 12px; height: 12px; stroke-width: 2.4; color: var(--warn); }
+
+.cb { appearance: none; -webkit-appearance: none; display: grid; place-content: center; flex: none; width: 18px; height: 18px; margin: 0; border: 1.5px solid var(--line-2); border-radius: 5px; background: var(--surface); cursor: pointer; transition: background .12s, border-color .12s; }
+.cb:hover { border-color: var(--c-solid, var(--ink-3)); }
+.cb:checked, .cb:indeterminate { background: var(--c-solid, var(--ink)); border-color: var(--c-solid, var(--ink)); }
+.cb:checked::after { content: ""; width: 9px; height: 5px; margin-top: -2px; border-left: 2px solid #fff; border-bottom: 2px solid #fff; transform: rotate(-45deg); }
+.cb:indeterminate::after { content: ""; width: 8px; height: 2px; border-radius: 2px; background: #fff; }
+.cb:disabled { opacity: .4; cursor: not-allowed; }
+
+.p-foot { padding: 10px 14px 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--ink-2); }
+.p-foot button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 4px; border: 0; background: none; text-align: left; color: var(--warn); font-weight: 600; font-size: 12.5px; border-radius: 8px; }
+.p-foot button:hover { background: var(--sunken); }
+
+/* ---------- Relatório ---------- */
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+.tile { padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.tile b { display: block; font: 600 32px/1.1 var(--serif); font-variant-numeric: tabular-nums; }
+.tile span { color: var(--ink-3); font-size: 12.5px; }
+.card { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.card > h3 { display: flex; align-items: center; gap: 10px; margin: 0; padding: 13px 18px; font-size: 14.5px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.card > h3 .count { margin-left: auto; }
+.card > p { margin: 0; padding: 14px 18px; color: var(--ink-2); font-size: 14px; }
+.card.warn > h3 { color: var(--warn); }
+.card ul { margin: 0; padding: 12px 18px 14px 36px; color: var(--ink-2); font-size: 13.5px; }
+.card li + li { margin-top: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { padding: 8px 18px; text-align: left; color: var(--ink-3); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+td { padding: 9px 18px; border-top: 1px solid var(--line); vertical-align: top; }
+td.word { font-weight: 650; word-break: break-word; }
+.ids { display: flex; flex-wrap: wrap; gap: 4px; }
+.id { padding: 0 6px; border-radius: 5px; border: 1px dashed var(--line-2); font: 11.5px/1.6 var(--mono); color: var(--ink-3); }
+.id.on { border: 1px solid transparent; background: var(--c-tint); color: var(--c-strong); }
+.badge { display: inline-block; padding: 1px 9px; border-radius: 99px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.badge.on { background: var(--c-tint); color: var(--c-strong); }
+.badge.off { background: var(--sunken); color: var(--ink-3); }
+.badge.part { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+
+/* ---------- Sobre nós ---------- */
+.about { width: min(94vw, 760px); max-height: 90vh; padding: clamp(22px, 4vw, 38px); border: 1px solid var(--line); border-radius: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 30px 80px -20px rgb(0 0 0 / .5); }
+.about::backdrop { background: rgb(12 11 10 / .6); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+.about-close { position: absolute; top: 14px; right: 14px; }
+.about-kicker { margin: 0 0 6px; font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+.about h2 { margin: 0 0 14px; font: 600 32px/1.1 var(--serif); letter-spacing: -.01em; }
+.about p { margin: 0 0 12px; color: var(--ink-2); line-height: 1.6; }
+
+/* Uma pasta de arquivo por pessoa: a aba em cima, a folha lá dentro. Fechada,
+   o nome e a descrição estão em asteriscos; aberta (hover, foco ou toque),
+   lê-se tudo. */
+.files { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 30px 16px; margin-top: 34px; }
+.file { position: relative; padding: 14px 14px 12px; border-radius: 0 10px 8px 8px; background: var(--folder-back); box-shadow: 0 6px 16px -8px rgb(0 0 0 / .45); outline: none; transition: transform .2s, box-shadow .2s; }
+.file::before { content: attr(data-ref); position: absolute; left: 0; bottom: calc(100% - 1px); width: 58%; height: 20px; padding: 3px 10px 0; border-radius: 8px 0 0 0; background: var(--folder-back); clip-path: polygon(0 0, 86% 0, 100% 100%, 0 100%); color: color-mix(in srgb, var(--ink) 60%, transparent); font: 700 10px/1.6 var(--font); letter-spacing: .1em; }
+.file.open { transform: translateY(-3px) rotate(-.6deg); box-shadow: 0 14px 24px -10px rgb(0 0 0 / .5); }
+.file:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.file-sheet { position: relative; min-height: 150px; padding: 14px 14px 12px; border-radius: 3px; background: var(--paper); color: var(--paper-ink); box-shadow: 0 1px 4px rgb(0 0 0 / .25); }
+.file-name { margin: 0 0 6px; font: 700 17px/1.3 "American Typewriter", "Courier New", ui-monospace, monospace; }
+.file-desc { min-height: 3em; margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-2); overflow-wrap: anywhere; }
+/* intro.js-style: o texto é escrito e censurado por setupAbout(); .is-mask é
+   o estado só com asteriscos. */
+.file-name.is-mask, .file-desc.is-mask { color: var(--accent); letter-spacing: .14em; font-weight: 700; }
+.file-gh { display: flex; align-items: flex-start; gap: 6px; max-width: 100%; font: 600 12px/1.3 var(--font); color: var(--ink-3); text-decoration: none; overflow-wrap: anywhere; }
+.file-gh span { min-width: 0; }
+a.file-gh { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+a.file-gh:hover { text-decoration-color: var(--accent); }
+.file-gh svg { flex: none; width: 15px; height: 15px; fill: currentColor; }
+.file-stamp { position: absolute; right: 10px; bottom: 10px; padding: 1px 6px; border: 2px solid var(--accent); border-radius: 4px; color: var(--accent); font: 800 9.5px/1.5 var(--font); letter-spacing: .12em; text-transform: uppercase; transform: rotate(-8deg); opacity: .85; transition: opacity .15s; }
+.file.open .file-stamp { opacity: 0; }
+
+/* ---------- Tooltip e avisos ---------- */
+.tip { position: fixed; z-index: 60; max-width: 280px; padding: 7px 11px; border-radius: 9px; background: var(--ink); color: var(--bg); font: 12.5px/1.45 var(--font); pointer-events: none; opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s; }
+.tip.show { opacity: 1; transform: none; }
+.tip b { display: block; font-weight: 700; }
+.tip small { opacity: .7; font-family: var(--mono); }
+.toasts { position: fixed; left: 50%; bottom: 22px; z-index: 70; display: grid; gap: 8px; transform: translateX(-50%); width: min(92vw, 460px); }
+.toast { padding: 11px 16px; border-radius: 12px; background: var(--ink); color: var(--bg); font-size: 14px; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .5); animation: rise .2s ease-out; }
+.toast.error { background: var(--danger); color: #fff; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } }
+
+footer { margin-top: auto; padding: 22px 0 30px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 12.5px; }
+footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; }
+
+@media (max-width: 1040px) {
+  .ws { grid-template-columns: 1fr; }
+  .panel { position: static; max-height: none; order: -1; }
+  .tree { max-height: 46vh; }
+  .hero { grid-template-columns: minmax(0, 1fr); min-height: 0; }
+  .folder { margin-top: 22px; transform: rotate(.8deg); }
+}
+@media (max-width: 680px) {
+  /* As linhas do bloco não partem: em ecrãs estreitos, encolhe-o para caber. */
+  .folder { padding: 26px 12px 16px; }
+  .spec { padding-right: 10px; padding-left: 46px; font-size: clamp(12px, 3.7vw, 16px); }
+  .tiles { grid-template-columns: 1fr 1fr; }
+  .pill span { display: none; }
+  .top-r { gap: 6px; }
+  .top .btn.ghost { padding: 0 8px; }
+  .brand span:last-child { display: none; }
+  .card { overflow-x: auto; }
+  .seg button { padding: 7px 10px; }
+  .wh-r .btn { flex: 1; }
+  .wh h2 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; transition-delay: 0ms !important; }
+}
+</style>
+<link rel="stylesheet" href="intro.css">
+<link rel="stylesheet" href="detective.css">
+<noscript><style>#intro { display: none; }</style></noscript>
+</head>
+<body data-phase="landing">
+
+<!-- ============ Ecrã de boas-vindas ============
+     O texto é escrito à máquina por intro.js, e as palavras dentro de <mark>
+     transformam-se em "*" (a versão inglesa da frase está em data-en). O nome do website (Anonimizator; em inglês,
+     Anonymizator) está em .intro-title, em .brand, no <title> e em i18n.js. -->
+<section id="intro" aria-label="Boas-vindas">
+ <div class="intro-stage">
+  <div class="intro-light" aria-hidden="true"></div>
+  <div class="intro-bloom" aria-hidden="true"></div>
+
+  <div class="lamp" aria-hidden="true">
+    <div class="rope"></div>
+    <svg class="lamp-head" viewBox="0 0 136 86">
+      <defs>
+        <linearGradient id="lamp-shade" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#5a5145"/>
+          <stop offset="1" stop-color="#1f1c18"/>
+        </linearGradient>
+        <linearGradient id="lamp-warm" x1="0" y1="0" x2="0" y2="1">
+          <stop offset=".5" stop-color="#ffb866" stop-opacity="0"/>
+          <stop offset="1" stop-color="#ffb866" stop-opacity=".6"/>
+        </linearGradient>
+      </defs>
+      <rect class="lamp-socket" x="60" y="1" width="16" height="18" rx="3"/>
+      <path class="lamp-shade" d="M6 78C6 43 36 17 68 17s62 26 62 61z"/>
+      <path class="lamp-on" d="M6 78C6 43 36 17 68 17s62 26 62 61z" fill="url(#lamp-warm)"/>
+      <path class="lamp-shine" d="M19 61C24 43 40 30 59 25"/>
+      <ellipse class="lamp-rim" cx="68" cy="78" rx="62" ry="6.5"/>
+      <ellipse class="lamp-on" cx="68" cy="78" rx="60.5" ry="5.5" fill="#ffdf9e"/>
+    </svg>
+  </div>
+
+  <div class="intro-copy">
+    <p class="intro-title" data-en="Anonymizator">Anonimizator</p>
+    <p class="intro-line" data-en="My name is &lt;mark&gt;Maria&lt;/mark&gt; &lt;mark&gt;Santos&lt;/mark&gt;, I am &lt;mark&gt;47&lt;/mark&gt; years old and I live in &lt;mark&gt;Lisbon&lt;/mark&gt;.">Chamo-me <mark>Maria</mark> <mark>Santos</mark>, tenho <mark>47</mark> anos e vivo em <mark>Lisboa</mark>.</p>
+    <p class="intro-hint"></p>
+  </div>
+
+  <button class="intro-cue" type="button">
+    Desliza para começar
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+  </button>
+ </div>
+</section>
+
+<header class="top">
+  <div class="wrap">
+    <button class="brand" id="home" type="button" aria-label="Início">
+      <span class="mark" aria-hidden="true">*</span>
+      <span>Anonimizator</span>
+    </button>
+    <div class="top-r">
+      <button class="btn ghost" id="about-open" type="button">Sobre nós</button>
+      <span class="pill" id="server"><i></i><span>A ligar ao servidor…</span></span>
+      <button class="icon-btn lang-btn" id="lang" type="button" aria-label="Mudar para inglês">PT</button>
+      <a class="icon-btn" href="https://github.com/pedromcftrindade/nos-gen-ai-hackathon/tree/team-babuja" target="_blank" rel="noopener" aria-label="Repositório no GitHub">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.93-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0z"/></svg>
+      </a>
+      <button class="icon-btn" id="theme" type="button" aria-label="Alternar entre tema claro e escuro"></button>
+    </div>
+  </div>
+</header>
+
+<!-- ============ Página inicial ============ -->
+<main id="landing">
+ <div class="wrap">
+  <section class="hero">
+    <div>
+      <h1>Esconde o que é pessoal.<br><em>Mantém o que importa.</em></h1>
+      <p class="lede">Carrega um PDF e escolhe o que fica escondido.</p>
+
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Carregar ficheiros PDF ou um ZIP">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/></svg>
+        <strong>Larga aqui os teus PDF</strong>
+        <span>um, vários ou um ZIP · ou clica para escolher</span>
+        <input type="file" id="file" accept="application/pdf,.pdf,application/zip,.zip" multiple hidden>
+      </div>
+      <div class="under">
+        <button class="link" id="sample" type="button">Experimentar com um exemplo →</button>
+        <span>Até 25 MB · o texto é analisado pelo Gemini</span>
+      </div>
+    </div>
+
+    <div class="folder" aria-hidden="true">
+      <div class="spec" id="spec">
+        <svg class="clip" viewBox="0 0 26 58"><path d="M18 16v26a5 5 0 0 1-10 0V11a8 8 0 0 1 16 0v33a11 11 0 0 1-22 0V18"/></svg>
+        <h4>Relatório de Admissão</h4>
+        <div class="row">Paciente: <span class="sp hue" style="--h:8" data-t="Maria Santos">Maria Santos</span>, <span class="sp hue" style="--h:8" data-t="47">47</span> anos</div>
+        <div class="row">Diagnóstico: <span class="sp hue" style="--h:146" data-t="HIV positivo">HIV positivo</span> desde 2018</div>
+        <div class="row">NIF: <span class="sp hue" style="--h:8" data-t="097865413">097865413</span></div>
+        <div class="row">Cartão: <span class="sp hue" style="--h:283" data-t="4111 2222 3333 4444">4111 2222 3333 4444</span></div>
+        <div class="row">Altura <span class="sp hue" style="--h:198" data-t="1,68m">1,68m</span> · Peso <span class="sp hue" style="--h:198" data-t="72kg">72kg</span></div>
+      </div>
+    </div>
+  </section>
+ </div>
+</main>
+
+<!-- ============ Área de trabalho ============ -->
+<div id="workspace" class="wrap">
+  <!-- Um separador por documento; cada um guarda as suas escolhas. -->
+  <div class="tabs" id="tabs" hidden></div>
+  <div class="wh">
+    <div>
+      <h2 id="fname">documento.pdf</h2>
+      <div class="meta" id="fmeta"></div>
+    </div>
+    <div class="wh-r">
+      <button class="btn ghost" id="newdoc" type="button">Novo documento</button>
+      <button class="btn" id="dl-json" type="button" disabled>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6"/></svg>Relatório
+      </button>
+      <button class="btn" id="dl-txt" type="button" disabled>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>.txt
+      </button>
+      <button class="btn primary" id="dl-pdf" type="button" disabled>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg><span>PDF anonimizado</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="ws">
+    <section class="main" aria-label="Documento">
+      <div class="status" id="status" role="status"></div>
+      <div class="bar">
+        <div class="seg" id="views" role="group" aria-label="Vista do documento">
+          <button type="button" data-v="orig" aria-pressed="true">Original</button>
+          <button type="button" data-v="anon" aria-pressed="false">Anonimizado</button>
+          <button type="button" data-v="report" aria-pressed="false">Relatório</button>
+        </div>
+        <span class="hint" id="hint"></span>
+      </div>
+      <article class="paper loading" id="paper" aria-live="polite"></article>
+      <div id="report" hidden></div>
+    </section>
+
+    <aside class="panel" aria-label="O que esconder">
+      <div class="p-head">
+        <h3>O que esconder</h3>
+        <div class="p-actions">
+          <button class="mini" id="sel-all" type="button" disabled>Tudo</button>
+          <button class="mini" id="sel-none" type="button" disabled>Nada</button>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="big"><b id="stat-n">0</b><span id="stat-of"></span></div>
+        <div class="meter" id="meter" aria-hidden="true"></div>
+      </div>
+      <label class="search">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+        <input type="search" id="q" placeholder="Filtrar palavras ou categorias…" aria-label="Filtrar palavras ou categorias" autocomplete="off" disabled>
+      </label>
+      <div class="tree" id="tree"></div>
+      <div class="p-foot" id="foot" hidden></div>
+    </aside>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>NOS Gen-AI Hackathon · projeto open-source</span>
+    <span>Dados sensíveis detetados por IA podem conter erros: revê sempre o resultado antes de partilhar.</span>
+  </div>
+</footer>
+
+<!-- ============ Sobre nós ============
+     Cada membro é uma pasta de arquivo. O nome e a descrição aparecem
+     censurados (um * por palavra) e são escritos à máquina ao passar o rato,
+     ao focar com o teclado ou ao tocar; ao sair, voltam a ser censurados.
+     Edita aqui:
+       data-name    o nome
+       data-desc    uma frase sobre a pessoa
+       data-github  o utilizador do GitHub, sem o endereço -->
+<dialog class="about" id="about" aria-labelledby="about-title">
+  <button class="icon-btn about-close" id="about-close" type="button" aria-label="Fechar"></button>
+  <p class="about-kicker">NOS Gen-AI Hackathon</p>
+  <h2 id="about-title">Sobre nós</h2>
+  <p>Somos cinco alunos do 2.º ano da Licenciatura em Engenharia Informática e de Computadores, e juntámo-nos com uma ideia simples: um documento deve poder circular sem levar atrás a vida de quem lá aparece.</p>
+  <p>Pelo caminho discutimos com um modelo de linguagem até ele perceber o que é um dado pessoal, ensinámos um PDF a guardar segredos e alguém insistiu que o site precisava de um detetive.</p>
+  <p>Como bons anonimizadores, começámos por nós. <b>Passa o rato por uma pasta para a abrir.</b></p>
+  <div class="files" id="team">
+    <article class="file" tabindex="0" data-name="Diogo Osório" data-desc="An ambitious engineer that wants to change the world" data-github="dioooogooo"></article>
+    <article class="file" tabindex="0" data-name="Diogo Pinto" data-desc="AI and Cars enthusiast" data-github="PintoPTGamer"></article>
+    <article class="file" tabindex="0" data-name="Martim Salvador" data-desc="Computer Engineering, AI and Sports lover" data-github="martimdecastrosalvador-tech"></article>
+    <article class="file" tabindex="0" data-name="Manuel André" data-desc="I love O.S but this has nothing to do with it" data-github="manuelamma"></article>
+    <article class="file" tabindex="0" data-name="Pedro Trindade" data-desc="Videogames and movie culture lover" data-github="pedromcftrindade"></article>
+  </div>
+</dialog>
+
+<div class="tip" id="tip" role="tooltip"></div>
+<div class="toasts" id="toasts" aria-live="assertive"></div>
+
+<!-- Documento de exemplo: o PDF de raw_data/ e uma análise real guardada (resposta de /api/analyze). -->
+<script type="application/json" id="sample-data">{"name":"document_to_anonymize.pdf","pages":[[["Relatório","de","Admissão","-","Centro","Médico","Lisboa"],["Data:","15","de","abril","de","2025"],["Referência:","ADM-2025-04-15-089"],["Informações","do","Paciente:"],["Nome:","Maria","Conceição","Oliveira","Santos"],["Data","de","Nascimento:","12/03/1978"],["Sexo:","Feminino"],["NIF:","097865413"],["Cartão","de","Cidadão:","12345678-9ZX0"],["Morada:","Rua","das","Flores,","123,","Apt","45,","Sacavém,","Lisboa"],["Telefone:","+351","912","345","678"],["Email:","maria.santos@emailpessoal.pt"],["Número","da","Segurança","Social:","11223344556"],["Histórico","Médico:"],["A","paciente","Maria","Santos,","mulher","caucasiana","de","47","anos,","compareceu","à","consulta","relatando","dores"],["abdominais","intensas.","Tem","histórico","de","hipertensão","e","diabetes","tipo","2,","diagnosticada","há","5","anos.","É"],["HIV","positivo","desde","2018,","atualmente","com","carga","viral","indetectável","graças","ao","tratamento","com"],["antirretrovirais."],["A","paciente","relatou","que","sua","família","tem","histórico","de","cancro","da","mama","(mãe","falecida","aos","52","anos)"],["e","doença","cardíaca","(pai","e","avô","paterno).","Exames","genéticos","realizados","em","2022","indicaram"],["predisposição","ao","cancro","de","mama","(mutação","BRCA1","positiva)."],["Informações","Sociais","e","Comportamentais:"],["Estado","civil:","Divorciada"],["Filhos:","2","(João,","15","anos","e","Ana,","12","anos)"],["Religião:","Católica","praticante"],["Ocupação:","Professora","universitária","na","Faculdade","de","Direito","de","Lisboa"],["Hábitos:","Ex-fumante","(parou","há","3","anos),","consome","álcool","socialmente","(2-3","doses","por","semana)"],["Histórico","de","uso","de","substâncias:","Tratamento","para","dependência","de","ansiolíticos","em","2019"],["Informações","Financeiras:"],["Seguro","de","saúde:","Plano","Premium","Saúde","Total,","apólice","nº","987654321"],["Número","do","cartão","de","crédito:","4111","2222","3333","4444","(validade","09/27,","CVV","123)"],["Rendimento","anual","declarado:","€62.500"]],[["Dados","Biométricos:"],["Impressão","digital","registrada","no","sistema:","ID-BIO-12345"],["Reconhecimento","facial:","FACE-ID-78901"],["Altura:","1,68m"],["Peso:","72kg"],["Tipo","sanguíneo:","O+"],["Pressão","arterial","na","admissão:","145/90","mmHg"],["Notas","da","Consulta:"],["A","paciente","apresentou-se","ansiosa","durante","a","consulta,","relatando","problemas","no","trabalho"],["relativamente","à","elevada","carga","de","responsabilidades","que","adquiriu.","Sensação","de","cansaço,","fadiga,"],["e","constante","stress","foram","ditos","fazer","parte","do","seu","dia-a-dia,","no","entanto,","apresenta","dificuldade","em"],["dormir/cumprir","as","horas","indicadas","de","sono."],["Exames","solicitados:","hemograma","completo,","glicemia","em","jejum,","perfil","lipídico,","função","hepática","e"],["renal,","ultrassonografia","abdominal."],["Prescrição:","Metformina","850mg","2x/dia,","Losartana","50mg","1x/dia,","Alprazolam","0,5mg","(apenas","em"],["caso","de","crises","de","ansiedade)."],["Contatos","de","Emergência:"],["Nome:","António","Santos","(irmão)"],["Telefone:","+351961234567"],["Email:","antonio.santos@emailpessoal.pt"],["Nome:","Joana","Pereira","(amiga","próxima)"],["Telefone:","+351939876543"],["Assinatura","Digital:"],["Dr.","Carlos","Mendes"],["CRM:","12345-PT"],["Especialidade:","Medicina","Interna"],["Email:","carlos.mendes@centromedicalisboa.pt"],["Telefone:","+351213456789"]]],"masks":["*","*","*","-*","*","*","*","*:","*","*","*","*","*","*:","*","*","*","*:","*:","*","*","*","*","*","*","*:","*","*:","*","*:","*","*","*","*:","*","*:","*","*","*,","*,","*","*,","*,","*","*:","+*","*","*","*","*:","*","*","*","*","*:","*","*","*:","*","*","*","*,","*","*","*","*","*,","*","*","*","*","*","*","*.","*","*","*","*","*","*","*","*,","*","*","*","*.","*","*","*","*","*,","*","*","*","*","*","*","*","*","*","*.","*","*","*","*","*","*","*","*","*","*","*","*","(*","*","*","*","*)","*","*","*","(*","*","*","*).","*","*","*","*","*","*","*","*","*","*","*","(*","*","*).","*","*","*","*:","*","*:","*","*:","*","(*,","*","*","*","*,","*","*)","*:","*","*","*:","*","*","*","*","*","*","*","*","*:","*","(*","*","*","*),","*","*","*","(*","*","*","*)","*","*","*","*","*:","*","*","*","*","*","*","*","*","*:","*","*","*:","*","*","*","*,","*","*","*","*","*","*","*","*:","*","*","*","*","(*","*,","*","*)","*","*","*:","€*","*","*:","*","*","*","*","*:","*","*","*:","*","*:","*","*:","*","*","*:","*+","*","*","*","*:","*","*","*","*","*:","*","*","*","*","*","*","*,","*","*","*","*","*","*","*","*","*","*","*","*.","*","*","*,","*,","*","*","*","*","*","*","*","*","*","*,","*","*,","*","*","*","*","*","*","*","*","*.","*","*:","*","*,","*","*","*,","*","*,","*","*","*","*,","*","*.","*:","*","*","*,","*","*","*,","*","*","(*","*","*","*","*","*","*).","*","*","*:","*:","*","*","(*)","*:","+*","*:","*","*:","*","*","(*","*)","*:","+*","*","*:","*.","*","*","*:","*","*:","*","*","*:","*","*:","+*"],"pairs":[["Maria",19,"Personal Information","Name"],["Conceição",20,"Personal Information","Name"],["Oliveira",21,"Personal Information","Name"],["Santos",22,"Personal Information","Name"],["12/03/1978",26,"Personal Information","Date of Birth"],["Feminino",28,"Personal Information","Gender"],["097865413",30,"Identification Numbers","Tax Number"],["12345678-9ZX0",34,"Identification Numbers","Citizen Card"],["Rua",36,"Contact and Location","Street Address"],["das",37,"Contact and Location","Street Address"],["Flores",38,"Contact and Location","Street Address"],["123",39,"Contact and Location","Street Address"],["Apt",40,"Contact and Location","Street Address"],["45",41,"Contact and Location","Street Address"],["Sacavém",42,"Contact and Location","City"],["Lisboa",43,"Contact and Location","City"],["+351",45,"Contact and Location","Phone"],["912",46,"Contact and Location","Phone"],["345",47,"Contact and Location","Phone"],["678",48,"Contact and Location","Phone"],["maria.santos@emailpessoal.pt",50,"Contact and Location","Email"],["11223344556",55,"Identification Numbers","Social Security"],["Maria",60,"Personal Information","Name"],["Santos",61,"Personal Information","Name"],["caucasiana",63,"Beliefs and Traits","Ethnicity"],["47",65,"Personal Information","Age"],["dores",71,"Health Data","Symptom"],["abdominais",72,"Health Data","Symptom"],["intensas",73,"Health Data","Symptom"],["hipertensão",77,"Health Data","Diagnosis"],["diabetes",79,"Health Data","Diagnosis"],["tipo",80,"Health Data","Diagnosis"],["2",81,"Health Data","Diagnosis"],["5",84,"Health Data","Health Event Date"],["HIV",87,"Health Data","Diagnosis"],["positivo",88,"Health Data","Diagnosis"],["2018",90,"Health Data","Health Event Date"],["antirretrovirais",100,"Health Data","Treatment"],["cancro",110,"Health Data","Family History"],["da",111,"Health Data","Family History"],["mama",112,"Health Data","Family History"],["52",116,"Personal Information","Age"],["doença",119,"Health Data","Family History"],["cardíaca",120,"Health Data","Family History"],["2022",129,"Health Data","Health Event Date"],["predisposição",131,"Health Data","Genetic Result"],["ao",132,"Health Data","Genetic Result"],["cancro",133,"Health Data","Genetic Result"],["de",134,"Health Data","Genetic Result"],["mama",135,"Health Data","Genetic Result"],["BRCA1",137,"Health Data","Genetic Result"],["Divorciada",145,"Personal Information","Marital Status"],["2",147,"Personal Information","Other"],["João",148,"Personal Information","Name"],["15",149,"Personal Information","Age"],["Ana",152,"Personal Information","Name"],["12",153,"Personal Information","Age"],["Católica",156,"Beliefs and Traits","Religion"],["praticante",157,"Beliefs and Traits","Religion"],["Professora",159,"Education and Career","Occupation"],["universitária",160,"Education and Career","Occupation"],["Faculdade",162,"Education and Career","Institution"],["de",163,"Education and Career","Institution"],["Direito",164,"Education and Career","Institution"],["de",165,"Education and Career","Institution"],["Lisboa",166,"Education and Career","Institution"],["Ex-fumante",168,"Health Data","Substance Use"],["3",171,"Health Data","Health Event Date"],["2-3",176,"Health Data","Substance Use"],["doses",177,"Health Data","Substance Use"],["por",178,"Health Data","Substance Use"],["semana",179,"Health Data","Substance Use"],["Tratamento",185,"Health Data","Treatment"],["para",186,"Health Data","Treatment"],["dependência",187,"Health Data","Treatment"],["de",188,"Health Data","Treatment"],["ansiolíticos",189,"Health Data","Treatment"],["2019",191,"Health Data","Health Event Date"],["Plano",197,"Financial Data","Insurance Plan"],["Premium",198,"Financial Data","Insurance Plan"],["Saúde",199,"Financial Data","Insurance Plan"],["Total",200,"Financial Data","Insurance Plan"],["987654321",203,"Identification Numbers","Insurance Policy"],["4111",209,"Financial Data","Card Number"],["2222",210,"Financial Data","Card Number"],["3333",211,"Financial Data","Card Number"],["4444",212,"Financial Data","Card Number"],["09/27",214,"Financial Data","Card Expiry Date"],["123",216,"Financial Data","CVV"],["€62.500",220,"Financial Data","Income"],["ID-BIO-12345",228,"Biometric Data","Biometric Identifier"],["FACE-ID-78901",231,"Biometric Data","Biometric Identifier"],["1,68m",233,"Biometric Data","Height"],["72kg",235,"Biometric Data","Weight"],["O+",238,"Biometric Data","Blood Type"],["145/90",243,"Biometric Data","Blood Pressure"],["ansiosa",251,"Health Data","Mental State"],["cansaço",269,"Health Data","Symptom"],["fadiga",270,"Health Data","Symptom"],["stress",273,"Health Data","Mental State"],["dificuldade",284,"Health Data","Symptom"],["em",285,"Health Data","Symptom"],["dormir/cumprir",286,"Health Data","Symptom"],["as",287,"Health Data","Symptom"],["horas",288,"Health Data","Symptom"],["indicadas",289,"Health Data","Symptom"],["de",290,"Health Data","Symptom"],["sono",291,"Health Data","Symptom"],["crises",320,"Health Data","Mental State"],["de",321,"Health Data","Mental State"],["ansiedade",322,"Health Data","Mental State"],["António",327,"Personal Information","Name"],["Santos",328,"Personal Information","Name"],["+351961234567",331,"Contact and Location","Phone"],["antonio.santos@emailpessoal.pt",333,"Contact and Location","Email"],["Joana",335,"Personal Information","Name"],["Pereira",336,"Personal Information","Name"],["+351939876543",340,"Contact and Location","Phone"]]}</script>
+
+<script>
+(() => {
+'use strict';
+
+/* =====================================================================
+   Utilitários
+   ===================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const NS = 'http://www.w3.org/2000/svg';
+
+// Todo o texto vindo do PDF ou do LLM é inserido como texto (nunca como HTML).
+function el(tag, attrs = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') n.className = v;
+    else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+    else n.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid);
+  return n;
+}
+
+const ICONS = {
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  warn: '<path d="M12 4 2.8 19.5h18.4zM12 10v4.5M12 17.2v.1"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"/>',
+  moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>',
+  x: '<path d="m6 6 12 12M18 6 6 18"/>',
+};
+function icon(name, cls = '') {
+  const s = document.createElementNS(NS, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('class', `ico ${cls}`.trim());
+  s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = ICONS[name];
+  return s;
+}
+
+const fmt = n => n.toLocaleString('pt-PT');
+const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : many}`;
+const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+const hueFor = i => Math.round((i * 137.508 + 8) % 360);
+const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+
+// A pontuação colada ao início/fim da palavra mantém-se ("Santos," -> "*,").
+// Tem de coincidir com PONTUACAO em server.py.
+const PUNCT = '.,;:!?()\\[\\]{}"\'“”«»…';
+const WORD_RE = new RegExp(`^([${PUNCT}]*)(.*?)([${PUNCT}]*)$`, 's');
+const core = w => WORD_RE.exec(w)[2];
+const censorToken = w => { const m = WORD_RE.exec(w); return m[1] + '*' + m[3]; };
+// Como fica a palavra i censurada. O servidor diz como o pipeline a escreve
+// (por exemplo "+351" -> "+*"); sem servidor, usa-se a regra local.
+const mask = i => (S.masks ? S.masks[i] : censorToken(S.words[i]));
+
+// Um id é válido se a palavra indicada pelo LLM estiver mesmo nessa posição.
+function matches(key, token) {
+  const k = core(key).toLowerCase();
+  const t = core(token).toLowerCase();
+  return !!k && (t === k || t.includes(k) || k.split(/\s+/).includes(t));
+}
+
+/* =====================================================================
+   Estado
+   ===================================================================== */
+const S = {
+  server: { online: false, hasKey: false, model: '' },
+  phase: 'landing',
+  doc: null,            // { name, docId, pages, source }
+  words: [],            // palavras por id
+  masks: null,          // palavras censuradas por id, vindas do servidor
+  pdf: false,           // o documento é mostrado como PDF (imagens + caixas)?
+  spans: [],            // <span> por id
+  topics: [],           // categorias -> subcategorias -> entradas
+  idMap: new Map(),     // id -> entradas que o contêm
+  warnings: [],
+  ov: new Map(),        // ajustes manuais: id -> true (esconder) | false (mostrar)
+  view: 'orig',
+  query: '',
+  spot: null,           // ids em destaque (hover)
+  info: null,           // { model, seconds }
+  docs: [],             // todos os documentos carregados; S.doc é o que está à vista
+  run: 0,               // muda quando se recomeça: respostas antigas são ignoradas
+};
+
+function setPhase(p) {
+  // Fora da página inicial o ecrã de boas-vindas deixa de existir, pelo que
+  // a posição do scroll deixa de fazer sentido.
+  const leaving = S.phase === 'landing' && p !== 'landing';
+  S.phase = p;
+  document.body.dataset.phase = p;
+  if (leaving) window.scrollTo(0, 0);
+  const ready = p === 'ready';
+  for (const id of ['dl-json', 'dl-txt', 'sel-all', 'sel-none', 'q']) $('#' + id).disabled = !ready;
+  $('#dl-pdf').disabled = !(ready && S.server.online);
+  $('#dl-pdf').title = ready && !S.server.online
+    ? 'Requer o servidor local: python submission/src/server.py' : '';
+  $('#paper').classList.toggle('loading', p === 'extracting' || p === 'analyzing');
+}
+
+/* =====================================================================
+   Modelo: JSON do LLM -> categorias validadas contra o texto
+   ===================================================================== */
+function buildModel(raw) {
+  const topics = [];
+  const warnings = [];
+  const n = S.words.length;
+
+  for (const [tName, subs] of Object.entries(isObj(raw) ? raw : {})) {
+    if (!isObj(subs)) continue;
+    const topic = { name: tName, hue: hueFor(topics.length), subs: [], open: false };
+
+    for (const [sName, words] of Object.entries(subs)) {
+      if (!isObj(words)) continue;
+      const sub = { name: sName, topic, entries: [] };
+
+      for (const [text, rawIds] of Object.entries(words)) {
+        const ids = new Set();
+        for (const v of [].concat(rawIds)) {
+          const id = Number(v);
+          if (!Number.isInteger(id)) continue;
+          if (id < 0 || id >= n) {
+            warnings.push({ kind: 'range', text, id, topic: tName, sub: sName });
+          } else if (!S.masks && !matches(text, S.words[id])) {   // com servidor, o pipeline já validou
+            warnings.push({ kind: 'mismatch', text, id, found: S.words[id], topic: tName, sub: sName });
+          } else {
+            ids.add(id);
+          }
+        }
+        if (!ids.size) continue;
+        sub.entries.push({
+          text, sub, on: true, ids: [...ids].sort((a, b) => a - b),
+          warn: warnings.filter(w => w.text === text && w.topic === tName && w.sub === sName).length,
+        });
+      }
+      if (sub.entries.length) topic.subs.push(sub);
+    }
+
+    if (topic.subs.length) {
+      topic.entries = topic.subs.flatMap(s => s.entries);
+      topic.ids = [...new Set(topic.entries.flatMap(e => e.ids))].sort((a, b) => a - b);
+      topics.push(topic);
+    }
+  }
+
+  S.topics = topics;
+  S.warnings = warnings;
+  S.idMap = new Map();
+  for (const t of topics) for (const e of t.entries) {
+    for (const id of e.ids) {
+      if (!S.idMap.has(id)) S.idMap.set(id, []);
+      S.idMap.get(id).push(e);
+    }
+  }
+  for (const s of S.topics.flatMap(t => t.subs)) {
+    s.ids = [...new Set(s.entries.flatMap(e => e.ids))];
+  }
+}
+
+const baseCensored = id => (S.idMap.get(id) || []).some(e => e.on);
+const censored = id => (S.ov.has(id) ? S.ov.get(id) : baseCensored(id));
+const hueOf = id => {
+  const es = S.idMap.get(id);
+  return (es.find(e => e.on) || es[0]).sub.topic.hue;
+};
+const countIn = ids => ids.reduce((a, id) => a + (censored(id) ? 1 : 0), 0);
+const totalCensored = () => countIn(S.words.map((_, i) => i));
+const censoredIds = () => S.words.map((_, i) => i).filter(censored);
+
+function toggleWord(id) {
+  const next = !censored(id);
+  if (next === baseCensored(id)) S.ov.delete(id); else S.ov.set(id, next);
+  refresh();
+}
+
+function setEntries(entries, on) {
+  for (const e of entries) {
+    e.on = on;
+    for (const id of e.ids) S.ov.delete(id);
+  }
+  refresh();
+}
+
+function selectAll(on) {
+  for (const t of S.topics) for (const e of t.entries) e.on = on;
+  if (on) for (const id of S.idMap.keys()) S.ov.delete(id); else S.ov.clear();
+  refresh();
+}
+
+/* =====================================================================
+   Documento
+   ===================================================================== */
+// O PDF verdadeiro: uma imagem por página e, por cima, uma caixa por palavra.
+function renderPdf(root) {
+  const pages = S.doc.ratios.map((ratio, n) => {
+    const src = `/api/page?doc_id=${encodeURIComponent(S.doc.docId)}&n=${n}`;
+    const page = el('div', { class: 'pdfpage' }, el('img', { src, 'data-orig': src, alt: `Página ${n + 1} do documento`, draggable: 'false' }));
+    page.style.aspectRatio = `1 / ${ratio}`;
+    root.append(page);
+    return page;
+  });
+  S.doc.boxes.forEach(([n, x, y, w, h], id) => {
+    const s = el('span', { class: 'w', 'data-i': id });
+    s.style.cssText = `left:${x * 100}%;top:${y * 100}%;width:${w * 100}%;height:${h * 100}%`;
+    S.spans[id] = s;
+    pages[n].append(s);
+  });
+}
+
+// Na vista anonimizada pede-se ao servidor o PDF já redigido, página a
+// página, um instante depois da última alteração.
+let previewRun = 0;
+let previewTimer = null;
+function syncPreview() {
+  const paper = $('#paper');
+  const imgs = $$('.pdfpage img', paper);
+  if (S.view !== 'anon') {
+    ++previewRun;
+    clearTimeout(previewTimer);
+    S.previewKey = null;
+    paper.classList.remove('busy');
+    for (const im of imgs) if (im.getAttribute('src') !== im.dataset.orig) im.src = im.dataset.orig;
+    return;
+  }
+  const ids = censoredIds();
+  const key = ids.join(',');
+  if (key === S.previewKey) return;
+  S.previewKey = key;
+  const run = ++previewRun;
+  clearTimeout(previewTimer);
+  paper.classList.add('busy');
+  previewTimer = setTimeout(async () => {
+    try {
+      const blobs = await Promise.all(imgs.map((_, n) =>
+        api('/api/preview', { json: { doc_id: S.doc.docId, ids, n } }).then(r => r.blob())));
+      if (run !== previewRun) return;
+      imgs.forEach((im, n) => { im.src = URL.createObjectURL(blobs[n]); });
+    } catch (e) {
+      if (run === previewRun) toast(e.message, 'error');
+    } finally {
+      if (run === previewRun) paper.classList.remove('busy');
+    }
+  }, 300);
+}
+
+function renderDoc() {
+  const root = $('#paper');
+  root.textContent = '';
+  root.classList.toggle('pdf', S.pdf);
+  S.spans = [];
+  if (S.pdf) return renderPdf(root);
+  let id = 0;
+  S.doc.pages.forEach((lines, p) => {
+    if (p > 0) root.append(el('div', { class: 'pg' }, el('span', {}, `Página ${p + 1}`)));
+    for (const line of lines) {
+      const ln = el('div', { class: 'ln' });
+      line.forEach((w, k) => {
+        if (k) ln.append(' ');
+        const s = el('span', { class: 'w', 'data-i': id }, w);
+        S.spans[id++] = s;
+        ln.append(s);
+      });
+      root.append(ln);
+    }
+  });
+}
+
+function paint() {
+  const anon = S.view === 'anon';
+  $('#paper').classList.toggle('anon', anon);
+  for (let i = 0; i < S.spans.length; i++) {
+    const s = S.spans[i];
+    const flagged = S.idMap.has(i);
+    const c = censored(i);
+    let cls = 'w';
+    if (flagged) cls += ` f hue ${c ? 'on' : 'off'}`;
+    else if (c) cls += ' m neutral on';
+    if (S.spot && S.spot.has(i)) cls += ' spot';
+    if (s.className !== cls) s.className = cls;
+    if (flagged) {
+      const h = hueOf(i);
+      if (s._h !== h) { s.style.setProperty('--h', h); s._h = h; }
+    }
+    if (S.pdf) continue;   // as caixas não têm texto: o texto está na imagem
+    const txt = anon && c ? mask(i) : S.words[i];
+    if (s.textContent !== txt) s.textContent = txt;
+  }
+  $('#paper').classList.toggle('focus', !!(S.spot && S.spot.size));
+  if (S.pdf) syncPreview();
+}
+
+function sweep() {
+  const paper = $('#paper');
+  let k = 0;
+  for (const i of S.idMap.keys()) S.spans[i].style.setProperty('--d', `${(k++) * 14}ms`);
+  paper.classList.add('sweeping');
+  paint();
+  setTimeout(() => paper.classList.remove('sweeping'), 600 + k * 14);
+}
+
+function spot(ids) {
+  S.spot = ids && ids.length ? new Set(ids) : null;
+  paint();
+}
+
+/* =====================================================================
+   Painel (categorias -> subcategorias -> palavras)
+   ===================================================================== */
+function checkbox(label, onchange) {
+  return el('input', { type: 'checkbox', class: 'cb', 'aria-label': label, onchange });
+}
+const tri = es => {
+  const n = es.filter(e => e.on).length;
+  return n === 0 ? 0 : n === es.length ? 1 : 2;
+};
+function setTri(cb, state) {
+  cb.checked = state === 1;
+  cb.indeterminate = state === 2;
+}
+
+function buildTree() {
+  const tree = $('#tree');
+  tree.textContent = '';
+
+  if (!S.topics.length) {
+    tree.append(el('div', { class: 'empty' }, 'O modelo não encontrou dados sensíveis neste documento.'));
+    return;
+  }
+
+  for (const t of S.topics) {
+    const cb = checkbox(`Esconder tudo em ${t.name}`, e => setEntries(t.entries, e.target.checked));
+    const count = el('span', { class: 'count' });
+    const chev = el('button', { class: 'chev', type: 'button', 'aria-label': `Expandir ${t.name}`, 'aria-expanded': 'false' }, icon('chevron'));
+    const head = el('div', { class: 't-head' }, chev, cb, el('span', { class: 'sw' }), el('span', { class: 't-name', title: t.name }, t.name), count);
+    const body = el('div', { class: 't-body' });
+    const root = el('div', { class: 'topic hue' }, head, body);
+    root.style.setProperty('--h', t.hue);
+
+    root.classList.toggle('open', t.open);
+    const toggleOpen = () => {
+      t.open = !t.open;
+      root.classList.toggle('open', t.open);
+      chev.setAttribute('aria-expanded', t.open);
+    };
+    head.addEventListener('click', e => { if (e.target !== cb) toggleOpen(); });
+    head.addEventListener('mouseenter', () => spot(t.ids));
+    head.addEventListener('mouseleave', () => spot(null));
+    t.ui = { root, cb, count, chev };
+
+    for (const s of t.subs) {
+      const scb = checkbox(`Esconder tudo em ${s.name}`, e => setEntries(s.entries, e.target.checked));
+      const scount = el('span', { class: 'count' });
+      const shead = el('div', { class: 's-head' }, scb, el('span', { class: 'grow', title: s.name }, s.name), scount);
+      shead.addEventListener('mouseenter', () => spot(s.ids));
+      shead.addEventListener('mouseleave', () => spot(null));
+      const chips = el('div', { class: 'chips' });
+      const sroot = el('div', { class: 'sub' }, shead, chips);
+      s.ui = { root: sroot, cb: scb, count: scount };
+
+      for (const e of s.entries) {
+        const label = e.ids.length > 1 ? el('small', {}, `×${e.ids.length}`) : null;
+        const chip = el('button', { class: 'chip', type: 'button', 'aria-pressed': 'true',
+          title: e.warn ? `${e.warn} id(s) indicado(s) pelo modelo foram ignorados por não coincidirem com o texto` : null },
+          e.warn ? icon('warn') : null, e.text, label);
+        chip.addEventListener('click', () => setEntries([e], !e.on));
+        chip.addEventListener('mouseenter', () => spot(e.ids));
+        chip.addEventListener('mouseleave', () => spot(null));
+        e.ui = { chip };
+        chips.append(chip);
+      }
+      body.append(sroot);
+    }
+    tree.append(root);
+  }
+}
+
+function refreshPanel() {
+  const total = S.words.length;
+  const hidden = totalCensored();
+  $('#stat-n').textContent = fmt(hidden);
+  $('#stat-of').textContent = `de ${fmt(total)} palavras · ${total ? Math.round(hidden / total * 100) : 0}%`;
+
+  // Barra: cada categoria ocupa a sua parte do documento.
+  const meter = $('#meter');
+  meter.textContent = '';
+  const seen = new Set();
+  let inTopics = 0;
+  const seg = (n, cls, h) => {
+    if (n <= 0) return;
+    const i = el('i', { class: cls });
+    if (h != null) i.style.setProperty('--h', h);
+    i.style.flex = `${n} 0 0`;
+    meter.append(i);
+  };
+  for (const t of S.topics) {
+    const mine = t.ids.filter(id => !seen.has(id));
+    mine.forEach(id => seen.add(id));
+    const n = countIn(mine);
+    inTopics += n;
+    seg(n, 'hue', t.hue);
+  }
+  seg(hidden - inTopics, 'neutral');          // palavras adicionadas à mão
+  const rest = el('i');
+  rest.style.cssText = `flex:${Math.max(total - hidden, 0)} 0 0;min-width:0;background:transparent`;
+  meter.append(rest);
+
+  for (const t of S.topics) {
+    setTri(t.ui.cb, tri(t.entries));
+    t.ui.count.textContent = `${countIn(t.ids)}/${t.ids.length}`;
+    for (const s of t.subs) {
+      setTri(s.ui.cb, tri(s.entries));
+      s.ui.count.textContent = `${countIn(s.ids)}/${s.ids.length}`;
+      for (const e of s.entries) {
+        e.ui.chip.classList.toggle('on', e.on);
+        e.ui.chip.setAttribute('aria-pressed', e.on);
+      }
+    }
+  }
+
+  const foot = $('#foot');
+  foot.hidden = !S.warnings.length;
+  if (S.warnings.length) {
+    foot.textContent = '';
+    foot.append(el('button', { type: 'button', onclick: () => { setView('report'); $('#warnings')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); } },
+      icon('warn'), `${plural(S.warnings.length, 'id ignorado', 'ids ignorados')}: não coincidiam com o texto. Ver detalhes`));
+  }
+}
+
+function applyFilter() {
+  const q = norm(S.query.trim());
+  const has = (s) => norm(s).includes(q);
+  let shown = 0;
+  for (const t of S.topics) {
+    const topicHit = !q || has(t.name);
+    let any = topicHit;
+    for (const s of t.subs) {
+      const subHit = topicHit || has(s.name);
+      let subAny = subHit;
+      for (const e of s.entries) {
+        const hit = subHit || has(e.text);
+        e.ui.chip.hidden = !hit;
+        subAny = subAny || hit;
+      }
+      s.ui.root.hidden = !subAny;
+      any = any || subAny;
+    }
+    t.ui.root.hidden = !any;
+    t.ui.root.classList.toggle('open', q ? any : t.open);
+    if (any) shown++;
+  }
+  const tree = $('#tree');
+  tree.querySelector('.empty.q')?.remove();
+  if (q && !shown) tree.append(el('div', { class: 'empty q' }, `Sem resultados para “${S.query.trim()}”.`));
+  if (S.view === 'report') renderReport();
+}
+
+/* =====================================================================
+   Relatório
+   ===================================================================== */
+function renderReport() {
+  const root = $('#report');
+  root.textContent = '';
+  const total = S.words.length;
+  const q = norm(S.query.trim());
+  const hit = (...xs) => !q || xs.some(x => norm(x).includes(q));
+
+  const tile = (n, label) => el('div', { class: 'tile' }, el('b', {}, fmt(n)), el('span', {}, label));
+  root.append(el('div', { class: 'tiles' },
+    tile(total, 'palavras no documento'),
+    tile(S.idMap.size, 'detetadas pela IA'),
+    tile(totalCensored(), 'palavras escondidas'),
+    tile(S.warnings.length, 'ids rejeitados')));
+
+  const how = S.info
+    ? `Análise feita com ${S.info.model}${S.info.seconds ? ` em ${String(S.info.seconds).replace('.', ',')} s` : ''}. `
+    : 'Resultado pré-calculado de uma análise anterior (nenhum pedido foi feito ao Gemini). ';
+  root.append(el('div', { class: 'card' },
+    el('h3', {}, 'Como foi decidido'),
+    el('p', {}, how + 'Cada palavra do documento recebe um id. O Gemini devolve cada valor com o seu id, categoria e subcategoria, e o pipeline confirma no texto original que a palavra está mesmo nesse id (corrige os que vêm deslocados e descarta os restantes). A decisão final é tua: tudo o que escolheres aqui é o que sai nos ficheiros exportados.')));
+
+  if (S.warnings.length) {
+    root.append(el('div', { class: 'card warn', id: 'warnings' },
+      el('h3', {}, icon('warn'), 'Ids ignorados na validação', el('span', { class: 'count' }, fmt(S.warnings.length))),
+      el('ul', {}, S.warnings.map(w => el('li', {},
+        w.kind === 'range'
+          ? `“${w.text}” (${w.topic} › ${w.sub}) apontava para o id ${w.id}, que não existe no documento.`
+          : `“${w.text}” (${w.topic} › ${w.sub}) apontava para o id ${w.id}, mas nesse id está “${w.found}”. Não foi escondido.`)))));
+  }
+
+  for (const t of S.topics) {
+    const rows = [];
+    for (const s of t.subs) for (const e of s.entries) {
+      if (!hit(e.text, s.name, t.name)) continue;
+      const c = countIn(e.ids);
+      const state = c === e.ids.length ? ['on', 'Escondida'] : c === 0 ? ['off', 'Visível'] : ['part', `Parcial ${c}/${e.ids.length}`];
+      rows.push(el('tr', {},
+        el('td', { class: 'word' }, e.text),
+        el('td', {}, s.name),
+        el('td', {}, el('div', { class: 'ids' }, e.ids.map(id => el('span', { class: `id ${censored(id) ? 'on' : ''}` }, `#${id}`)))),
+        el('td', {}, el('span', { class: `badge ${state[0]}` }, state[1]))));
+    }
+    if (!rows.length) continue;
+    const card = el('div', { class: 'card hue' },
+      el('h3', {}, el('span', { class: 'sw' }), t.name, el('span', { class: 'count' }, `${countIn(t.ids)}/${t.ids.length} escondidas`)),
+      el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Palavra'), el('th', {}, 'Subcategoria'), el('th', {}, 'Posições'), el('th', {}, 'Estado'))), el('tbody', {}, rows)));
+    card.style.setProperty('--h', t.hue);
+    root.append(card);
+  }
+
+  // Ajustes manuais (validação manual de falsos positivos/negativos).
+  const added = [...S.ov].filter(([id, v]) => v && !S.idMap.has(id)).map(([id]) => id).sort((a, b) => a - b);
+  const kept = [...S.ov].filter(([id, v]) => !v && S.idMap.has(id)).map(([id]) => id).sort((a, b) => a - b);
+  if (added.length || kept.length) {
+    const li = (id, verb) => el('li', {}, `#${id} “${S.words[id]}” ${verb}`);
+    root.append(el('div', { class: 'card' },
+      el('h3', {}, 'Ajustes manuais', el('span', { class: 'count' }, fmt(added.length + kept.length))),
+      el('ul', {}, added.map(id => li(id, 'foi adicionada por ti (falso negativo).')), kept.map(id => li(id, 'foi detetada, mas mantida visível (falso positivo).')))));
+  }
+}
+
+/* =====================================================================
+   Vistas
+   ===================================================================== */
+const HINTS = {
+  orig: 'Clica numa palavra para a esconder ou mostrar.',
+  anon: 'Pré-visualização do resultado. Clica num * para voltar a mostrar.',
+  report: '',
+};
+function setView(v) {
+  S.view = v;
+  for (const b of $$('#views button')) b.setAttribute('aria-pressed', b.dataset.v === v);
+  $('#hint').textContent = v === 'anon' && S.pdf ? 'O PDF tal como vai ser exportado. Para alterar, volta ao Original.' : HINTS[v];
+  $('#paper').hidden = v === 'report';
+  $('#report').hidden = v !== 'report';
+  refresh();
+}
+
+function refresh() {
+  if (S.phase !== 'ready') return;
+  paint();
+  refreshPanel();
+  if (S.view === 'report') renderReport();
+}
+
+/* =====================================================================
+   Carregamento e análise
+   ===================================================================== */
+/* Vários documentos: cada entrada de S.docs tem o seu texto, o resultado da
+   análise e as escolhas de quem está a rever. Estados:
+     queued     à espera de vez        analyzing  o Gemini está a analisar
+     ready      pronto a rever         error      a análise falhou */
+function addDoc(fields) {
+  const entry = { status: 'queued', ov: new Map(), model: null, pairs: null, info: null, ...fields };
+  S.docs.push(entry);
+  return entry;
+}
+
+// Põe um documento à vista, com tudo o que já se sabe e escolheu sobre ele.
+function showDoc(entry) {
+  const fresh = S.doc !== entry;
+  S.doc = entry;
+  S.words = entry.pages.flat().flat();
+  S.masks = entry.masks || null;
+  S.pdf = !!(entry.boxes && S.server.online);
+  S.previewKey = null;
+  S.ov = entry.ov;
+  S.info = entry.info;
+  S.topics = []; S.idMap = new Map(); S.warnings = [];
+  S.query = ''; $('#q').value = ''; S.spot = null;
+
+  $('#fname').textContent = entry.name;
+  const nLines = entry.pages.reduce((a, p) => a + p.length, 0);
+  const meta = $('#fmeta');
+  meta.textContent = '';
+  meta.append(`${plural((entry.ratios || entry.pages).length, 'página', 'páginas')} · ${plural(S.words.length, 'palavra', 'palavras')} · ${plural(nLines, 'linha', 'linhas')}`);
+  if (entry.source === 'sample') meta.append(el('span', { class: 'tag' }, 'Exemplo'));
+  renderDoc();
+  renderTabs();
+  $('#report').textContent = '';
+
+  if (entry.status === 'ready') return showResult(entry, fresh);
+
+  const tree = $('#tree');
+  tree.textContent = '';
+  for (let i = 0; i < 5; i++) tree.append(el('div', { class: 'sk' }));
+  $('#stat-n').textContent = '–';
+  $('#stat-of').textContent = 'a aguardar análise…';
+  $('#meter').textContent = '';
+  $('#foot').hidden = true;
+  if (entry.status === 'error') {
+    setPhase('error');
+    renderStatus('error', { message: entry.error, retry: () => { entry.status = 'queued'; showDoc(entry); runQueue(); } });
+  } else {
+    setPhase('analyzing');
+    renderStatus(entry.status === 'queued' ? 'queued' : 2);
+  }
+  setView('orig');
+}
+
+function renderStatus(stage, extra = {}) {
+  const box = $('#status');
+  box.textContent = '';
+  box.className = 'status';
+  if (stage === 'error') {
+    box.classList.add('error');
+    box.append(icon('warn', 'bad'), el('span', { class: 'grow' }, extra.message),
+      extra.retry ? el('button', { class: 'btn', type: 'button', onclick: extra.retry }, 'Tentar novamente') : null);
+    return;
+  }
+  if (stage === 'done') {
+    box.classList.add('done');
+    box.append(icon('check', 'ok'), el('span', { class: 'grow' }, extra.message));
+    return;
+  }
+  if (stage === 'queued') {
+    box.append(el('span', { class: 'st' }, el('span', { class: 'dot' }), 'Na fila: é analisado a seguir aos anteriores.'));
+    return;
+  }
+  const step = (n, label, extraNode) => {
+    const state = stage > n ? 'done-s' : stage === n ? 'active' : '';
+    return el('span', { class: `st ${state}` },
+      el('span', { class: 'dot' }, stage > n ? icon('check') : stage === n ? el('span', { class: 'spin' }) : null),
+      label, extraNode);
+  };
+  box.append(step(1, 'A ler o PDF'), step(2, 'A analisar com o Gemini', stage === 2 ? el('time', { id: 'clock' }, '0,0 s') : null), step(3, 'A validar os ids'));
+}
+
+function toast(msg, kind = '') {
+  const t = el('div', { class: `toast ${kind}`, role: 'status' }, msg);
+  $('#toasts').append(t);
+  setTimeout(() => t.remove(), kind === 'error' ? 7000 : 3500);
+}
+
+async function api(path, { json, body, type } = {}) {
+  const opts = json ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(json) }
+    : body ? { method: 'POST', headers: { 'Content-Type': type }, body } : {};
+  let res;
+  try { res = await fetch(path, opts); } catch { throw new Error('Sem ligação ao servidor local. Está a correr?'); }
+  if (!res.ok) {
+    let msg = `Erro ${res.status}`;
+    try { msg = (await res.json()).error || msg; } catch { /* sem JSON */ }
+    throw new Error(msg);
+  }
+  return res;
+}
+
+const isZip = f => /\.zip$/i.test(f.name) || /zip/.test(f.type);
+const isPdf = f => /\.pdf$/i.test(f.name) || f.type === 'application/pdf';
+
+// Carrega um ou vários PDFs, ou ZIPs com PDFs. Na página inicial começa uma
+// lista nova; na área de trabalho acrescenta à que já existe.
+async function openFiles(files) {
+  files = [...(files || [])];
+  if (!files.length) return;
+  const bad = files.filter(f => !isPdf(f) && !isZip(f));
+  if (bad.length === files.length) return toast('Escolhe ficheiros PDF ou um ZIP.', 'error');
+  if (files.some(f => f.size > 25 * 1024 * 1024)) return toast('Cada ficheiro tem de ter menos de 25 MB.', 'error');
+  if (!S.server.online) {
+    return toast('Servidor não encontrado. Corre python submission/src/server.py para analisar PDFs.', 'error');
+  }
+
+  const starting = S.phase === 'landing';
+  if (starting) {
+    ++S.run;
+    S.docs = [];
+    S.doc = null;
+    setPhase('extracting');
+    $('#fname').textContent = files.length === 1 ? files[0].name : `${files.length} ficheiros`;
+    $('#fmeta').textContent = '';
+    $('#paper').textContent = '';
+    $('#tabs').hidden = true;
+    renderStatus(1);
+  }
+  const run = S.run;
+  const problems = bad.map(f => `${f.name} (não é PDF nem ZIP)`);
+  const added = [];
+  const take = (name, ext) => added.push(addDoc({ name, docId: ext.doc_id, pages: ext.pages, masks: ext.masks, boxes: ext.boxes, ratios: ext.ratios, source: 'upload' }));
+
+  for (const file of files) {
+    if (bad.includes(file)) continue;
+    try {
+      const body = await file.arrayBuffer();
+      if (isZip(file)) {
+        const res = await (await api('/api/unzip', { body, type: 'application/zip' })).json();
+        if (run !== S.run) return;
+        res.docs.forEach(d => take(d.name, d));
+        problems.push(...res.skipped);
+        if (!res.docs.length) problems.push(`${file.name} (sem PDFs)`);
+      } else {
+        const ext = await (await api('/api/extract', { body, type: 'application/pdf' })).json();
+        if (run !== S.run) return;
+        take(file.name, ext);
+      }
+    } catch (e) {
+      if (run !== S.run) return;
+      problems.push(`${file.name} (${e.message})`);
+    }
+  }
+
+  if (problems.length) toast(`Ignorados: ${problems.join('; ')}`, 'error');
+  if (!added.length) {
+    if (starting) { setPhase('error'); renderStatus('error', { message: 'Nenhum PDF pôde ser lido.' }); }
+    return;
+  }
+  if (starting || !S.doc) showDoc(added[0]); else renderTabs();
+  runQueue();
+}
+
+// Analisa os documentos em fila, um de cada vez.
+let queueBusy = false;
+async function runQueue() {
+  if (queueBusy) return;
+  queueBusy = true;
+  const run = S.run;
+  for (;;) {
+    const entry = S.docs.find(d => d.status === 'queued');
+    if (!entry || run !== S.run) break;
+    entry.status = 'analyzing';
+    entry.t0 = performance.now();
+    if (S.doc === entry) showDoc(entry); else renderTabs();
+    try {
+      const res = await (await api('/api/analyze', { json: { doc_id: entry.docId } })).json();
+      if (run !== S.run) break;
+      entry.pairs = res.pairs;
+      entry.info = { model: res.model, seconds: res.seconds, corrected: res.corrected, dropped: res.dropped };
+      entry.status = 'ready';
+    } catch (e) {
+      if (run !== S.run) break;
+      entry.status = 'error';
+      entry.error = e.message;
+    }
+    if (S.doc === entry) showDoc(entry); else renderTabs();
+  }
+  queueBusy = false;
+  if (run !== S.run && S.docs.some(d => d.status === 'queued')) runQueue();
+}
+// O cronómetro da análise que está à vista.
+setInterval(() => {
+  const c = $('#clock');
+  if (c && S.doc && S.doc.t0) c.textContent = `${((performance.now() - S.doc.t0) / 1000).toFixed(1).replace('.', ',')} s`;
+}, 100);
+
+// O pipeline devolve [palavra, id, categoria, subcategoria]. As etiquetas são
+// livres (é o Gemini que as escreve) e podem faltar: nesse caso a palavra vai
+// para um grupo genérico.
+const GROUP = 'Dados pessoais';
+const SUBGROUP = 'Sem subcategoria';
+
+// Mostra o resultado de um documento já analisado. Da primeira vez constrói
+// as categorias; depois reaproveita-as, com as escolhas feitas.
+function showResult(entry, fresh) {
+  const first = !entry.model;
+  if (entry.model) {
+    ({ topics: S.topics, idMap: S.idMap, warnings: S.warnings } = entry.model);
+  } else {
+    const tree = {};
+    for (const [word, id, cat, sub] of entry.pairs) {
+      const words = (tree[cat || GROUP] ||= {})[sub || SUBGROUP] ||= {};
+      (words[word] ||= []).push(id);
+    }
+    buildModel(tree);
+    // Pares que o pipeline rejeitou por a palavra não estar no id indicado.
+    for (const d of (S.info && S.info.dropped) || []) {
+      S.warnings.push({ kind: d.id >= 0 && d.id < S.words.length ? 'mismatch' : 'range', text: d.word, id: d.id, found: S.words[d.id], topic: GROUP, sub: SUBGROUP });
+    }
+    for (const t of S.topics) t.open = S.topics.length === 1;
+    entry.model = { topics: S.topics, idMap: S.idMap, warnings: S.warnings };
+  }
+  buildTree();
+  setPhase('ready');
+  const n = S.idMap.size;
+  const how = S.info
+    ? `Análise concluída com ${S.info.model}${S.info.seconds ? ` em ${String(S.info.seconds).replace('.', ',')} s` : ''}`
+    : 'Resultado pré-calculado do documento de exemplo (sem chamar o Gemini)';
+  const fixed = S.info && S.info.corrected ? ` ${plural(S.info.corrected, 'id deslocado foi corrigido', 'ids deslocados foram corrigidos')}.` : '';
+  renderStatus('done', { message: `${how}: ${plural(n, 'palavra a censurar', 'palavras a censurar')} em ${plural(S.topics.length, 'categoria', 'categorias')}.${fixed}` });
+  setView(fresh ? 'orig' : S.view);
+  if (first) sweep();
+}
+
+// Os ids a censurar num documento, esteja ou não à vista.
+function idsFor(entry) {
+  if (entry === S.doc) return censoredIds();
+  if (!entry.model) return [...new Set((entry.pairs || []).map(p => p[1]))];
+  const { idMap } = entry.model;
+  const n = entry.pages.flat().flat().length;
+  return Array.from({ length: n }, (_, i) => i).filter(i => (entry.ov.has(i) ? entry.ov.get(i) : (idMap.get(i) || []).some(e => e.on)));
+}
+
+function renderTabs() {
+  const bar = $('#tabs');
+  bar.textContent = '';
+  bar.hidden = !S.server.online || !S.docs.length || S.docs[0].source === 'sample';
+  if (bar.hidden) return;
+  const mark = d => d.status === 'ready' ? icon('check', 'ok') : d.status === 'error' ? icon('warn', 'bad')
+    : d.status === 'analyzing' ? el('span', { class: 'spin' }) : el('span', { class: 'wait' });
+  for (const d of S.docs) {
+    bar.append(el('button', { class: 'tab', type: 'button', 'aria-current': String(d === S.doc), title: d.name, onclick: () => { if (d !== S.doc) showDoc(d); } },
+      mark(d), el('span', { class: 'name' }, d.name)));
+  }
+  bar.append(el('button', { class: 'btn ghost', type: 'button', onclick: () => $('#file').click() }, '+ Adicionar'));
+  if (S.docs.length > 1) {
+    bar.append(el('span', { class: 'grow' }), el('button', { class: 'btn', type: 'button', id: 'dl-all', onclick: downloadAll }, 'Descarregar tudo (.zip)'));
+  }
+}
+
+async function downloadAll() {
+  const ready = S.docs.filter(d => d.status === 'ready');
+  if (!ready.length) return toast('Ainda não há documentos analisados.', 'error');
+  const btn = $('#dl-all');
+  btn.disabled = true;
+  try {
+    const res = await api('/api/redact-all', { json: { docs: ready.map(d => ({ doc_id: d.docId, name: d.name, ids: idsFor(d) })) } });
+    saveBlob(await res.blob(), 'anonimizados.zip');
+    const missing = S.docs.length - ready.length;
+    toast(missing ? `ZIP descarregado com ${ready.length} de ${S.docs.length} documentos (os restantes ainda não estão prontos).` : `ZIP descarregado com ${plural(ready.length, 'documento', 'documentos')}.`);
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function loadSample() {
+  const run = ++S.run;
+  const data = JSON.parse($('#sample-data').textContent);
+  // Com servidor, o exemplo também se vê como PDF; sem ele, só o texto.
+  let layout = {};
+  if (S.server.online) {
+    try { layout = await (await api('/api/layout?doc_id=sample')).json(); } catch { /* fica o texto */ }
+    if (run !== S.run) return;
+  }
+  S.docs = [];
+  S.doc = null;
+  showDoc(addDoc({ name: data.name, docId: 'sample', pages: data.pages, masks: data.masks, boxes: layout.boxes, ratios: layout.ratios, source: 'sample', status: 'ready', pairs: data.pairs }));
+}
+
+// "Novo documento" volta à zona de carregamento; o logótipo (toTop), ao
+// ecrã de boas-vindas, que fica por cima dela.
+function reset(toTop = false) {
+  ++S.run;
+  S.docs = [];
+  S.doc = null;
+  setPhase('landing');
+  $('#file').value = '';
+  window.scrollTo({ top: toTop ? 0 : $('#intro').offsetHeight });
+}
+
+/* =====================================================================
+   Exportação
+   ===================================================================== */
+function saveBlob(blob, name) {
+  const a = el('a', { href: URL.createObjectURL(blob), download: name });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const baseName = () => S.doc.name.replace(/\.pdf$/i, '');
+
+function anonymizedText() {
+  let id = 0;
+  const out = [];
+  for (const page of S.doc.pages) for (const line of page) {
+    out.push(line.map(w => { const i = id++; return censored(i) ? mask(i) : w; }).join(' '));
+  }
+  return out.join('\n') + '\n';
+}
+
+function reportJson() {
+  const categorias = {};
+  for (const t of S.topics) {
+    categorias[t.name] = {};
+    for (const s of t.subs) {
+      categorias[t.name][s.name] = {};
+      for (const e of s.entries) {
+        categorias[t.name][s.name][e.text] = { ids: e.ids, escondidas: e.ids.filter(censored) };
+      }
+    }
+  }
+  const manual = (want) => [...S.ov].filter(([id, v]) => v === want && (want ? !S.idMap.has(id) : S.idMap.has(id)))
+    .map(([id]) => ({ id, palavra: S.words[id] }));
+  return {
+    documento: S.doc.name,
+    gerado_em: new Date().toISOString(),
+    modelo: S.info ? S.info.model : null,
+    ids_corrigidos: S.info ? S.info.corrected || 0 : 0,
+    resumo: {
+      palavras_no_documento: S.words.length,
+      palavras_detetadas: S.idMap.size,
+      palavras_escondidas: totalCensored(),
+      categorias: S.topics.length,
+    },
+    categorias,
+    ajustes_manuais: { adicionadas: manual(true), mantidas_visiveis: manual(false) },
+    ids_ignorados: S.warnings,
+  };
+}
+
+async function downloadPdf() {
+  const btn = $('#dl-pdf');
+  const label = $('span', btn);
+  const old = label.textContent;
+  btn.disabled = true;
+  label.textContent = 'A gerar…';
+  btn.prepend(el('span', { class: 'spin', id: 'pdf-spin' }));
+  try {
+    const res = await api('/api/redact', { json: { doc_id: S.doc.docId, ids: censoredIds() } });
+    saveBlob(await res.blob(), `${baseName()}_anonimizado.pdf`);
+    toast('PDF anonimizado descarregado.');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    $('#pdf-spin')?.remove();
+    label.textContent = old;
+    btn.disabled = false;
+  }
+}
+
+/* =====================================================================
+   Tooltip das palavras
+   ===================================================================== */
+const tip = $('#tip');
+function showTip(w) {
+  const id = Number(w.dataset.i);
+  const es = S.idMap.get(id);
+  let html = null;
+  if (es) {
+    html = [el('b', {}, 'Dados sensíveis'), ...es.slice(0, 3).map(e => el('div', {}, `${e.sub.topic.name} › ${e.sub.name}`))];
+  } else if (S.ov.get(id)) {
+    html = [el('b', {}, 'Adicionada manualmente')];
+  }
+  if (!html) return hideTip();
+  tip.textContent = '';
+  tip.append(...html, el('small', {}, `id ${id}`));
+  const r = w.getBoundingClientRect();
+  tip.classList.add('show');
+  const tw = tip.offsetWidth;
+  tip.style.left = `${Math.max(8, Math.min(innerWidth - tw - 8, r.left + r.width / 2 - tw / 2))}px`;
+  tip.style.top = `${r.top - tip.offsetHeight - 8 < 8 ? r.bottom + 8 : r.top - tip.offsetHeight - 8}px`;
+}
+const hideTip = () => tip.classList.remove('show');
+
+/* =====================================================================
+   Página inicial: exemplo animado e arrastar-e-largar
+   ===================================================================== */
+function startSpecimen() {
+  const spans = $$('#spec .sp');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let anon = false;
+  const apply = on => spans.forEach((s, k) => setTimeout(() => {
+    s.textContent = on ? s.dataset.t.replace(/\S+/g, '*') : s.dataset.t;
+  }, reduce ? 0 : k * 110));
+  if (reduce) { apply(true); return; }
+  setInterval(() => {
+    if (S.phase !== 'landing' || document.hidden) return;
+    anon = !anon;
+    apply(anon);
+  }, 2800);
+}
+
+function setupLanding() {
+  const drop = $('#drop');
+  const input = $('#file');
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); } });
+  input.addEventListener('change', () => { openFiles(input.files); input.value = ''; });
+  for (const ev of ['dragenter', 'dragover']) {
+    window.addEventListener(ev, e => {
+      e.preventDefault();
+      if (S.phase === 'landing') drop.classList.add('over');
+    });
+  }
+  window.addEventListener('dragleave', e => { if (!e.relatedTarget) drop.classList.remove('over'); });
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('over');
+    openFiles(e.dataTransfer.files);   // na área de trabalho, acrescenta à lista
+  });
+  $('#sample').addEventListener('click', loadSample);
+  startSpecimen();
+}
+
+/* =====================================================================
+   Servidor e tema
+   ===================================================================== */
+async function pingServer() {
+  const pill = $('#server');
+  let label = 'Modo demonstração · servidor desligado';
+  let cls = 'warn';
+  try {
+    const r = await fetch('/api/health', { cache: 'no-store' });
+    if (!r.ok) throw new Error('sem API');
+    const j = await r.json();
+    S.server = { online: true, hasKey: j.has_key, model: j.model };
+    label = j.has_key ? `Servidor ligado · ${j.model}` : 'Servidor ligado · falta GEMINI_API_KEY';
+    cls = j.has_key ? 'ok' : 'warn';
+  } catch { S.server = { online: false, hasKey: false, model: '' }; }
+  pill.className = `pill ${cls}`;
+  pill.lastChild.textContent = label;
+  pill.title = S.server.online ? '' : 'Para analisar PDFs próprios: python submission/src/server.py';
+  setPhase(S.phase);
+}
+
+function setupTheme() {
+  const btn = $('#theme');
+  const draw = () => {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    btn.textContent = '';
+    btn.append(icon(dark ? 'sun' : 'moon'));
+  };
+  btn.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('theme', next); } catch { /* sem storage */ }
+    draw();
+  });
+  draw();
+}
+
+/* =====================================================================
+   Sobre nós: a equipa, censurada como o programa censura um documento
+   ===================================================================== */
+function setupAbout() {
+  const dialog = $('#about');
+  const stars = text => text.replace(/\S+/g, '*');   // um * por palavra
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  // Um campo que se escreve e se censura como o texto do ecrã de boas-vindas.
+  // Cada animação nova cancela a anterior (field._run).
+  function secret(tag, cls, text, speed) {
+    const field = el(tag, { class: `${cls} is-mask` }, stars(text));
+    field._text = text;
+    field._speed = speed;
+    return field;
+  }
+  // Revelar: apaga os asteriscos e escreve o texto à máquina.
+  async function reveal(field) {
+    const run = field._run = (field._run || 0) + 1;
+    const text = field._text;
+    field.classList.remove('is-mask');
+    if (still) { field.textContent = text; return; }
+    for (let n = 1; n <= text.length; n++) {
+      if (field._run !== run) return;
+      field.textContent = text.slice(0, n) + '_';
+      await wait(field._speed * (0.6 + Math.random() * 0.8));
+    }
+    if (field._run === run) field.textContent = text;
+  }
+  // Censurar: bate um * por cima de cada letra e depois fica um por palavra.
+  async function censor(field) {
+    const run = field._run = (field._run || 0) + 1;
+    const shown = field.textContent.replace(/_$/, '');
+    if (!still) {
+      for (let n = 1; n <= shown.length; n++) {
+        if (field._run !== run) return;
+        if (shown[n - 1] === ' ') continue;
+        field.textContent = shown.slice(0, n).replace(/\S/g, '*') + shown.slice(n);
+        await wait(field._speed * 0.45);
+      }
+      if (field._run !== run) return;
+      field.classList.add('is-mask');
+      await wait(140);
+      if (field._run !== run) return;
+    }
+    field.classList.add('is-mask');
+    field.textContent = stars(field._text);
+  }
+  const octocat = () => {
+    const s = document.createElementNS(NS, 'svg');
+    s.setAttribute('viewBox', '0 0 16 16');
+    s.setAttribute('aria-hidden', 'true');
+    s.innerHTML = '<path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.93-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.88.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 0z"/>';
+    return s;
+  };
+
+  $$('.file', dialog).forEach((card, i) => {
+    const { name, desc, github } = card.dataset;
+    card.dataset.ref = `Processo n.º ${String(i + 1).padStart(2, '0')}`;
+    card.setAttribute('aria-label', `${name}. ${desc}`);
+    const gh = github
+      ? el('a', { class: 'file-gh', href: `https://github.com/${encodeURIComponent(github)}`, target: '_blank', rel: 'noopener' }, octocat(), el('span', {}, github))
+      : el('span', { class: 'file-gh' }, octocat(), 'GitHub por acrescentar');
+    const fields = [secret('h3', 'file-name', name, 42), secret('p', 'file-desc', desc, 18)];
+    card.append(el('div', { class: 'file-sheet' }, ...fields, gh,
+      el('span', { class: 'file-stamp', 'aria-hidden': 'true' }, 'Confidencial')));
+
+    // Aberta enquanto o rato estiver por cima ou o foco lá dentro.
+    let hover = false;
+    const sync = () => {
+      const open = hover || card.contains(document.activeElement);
+      if (open === card.classList.contains('open')) return;
+      card.classList.toggle('open', open);
+      fields.forEach(open ? reveal : censor);
+    };
+    card.addEventListener('mouseenter', () => { hover = true; sync(); });
+    card.addEventListener('mouseleave', () => { hover = false; sync(); });
+    card.addEventListener('focusin', sync);
+    card.addEventListener('focusout', () => setTimeout(sync));
+  });
+
+  $('#about-close').append(icon('x'));
+  $('#about-open').addEventListener('click', () => dialog.showModal());
+  $('#about-close').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', e => { if (e.target === dialog) dialog.close(); });   // clicar fora fecha
+  // Ao abrir, o browser foca a primeira pasta; tira-se o foco para começarem
+  // todas fechadas.
+  $('#about-open').addEventListener('click', () => $('#about-close').focus());
+}
+
+/* =====================================================================
+   Arranque
+   ===================================================================== */
+function init() {
+  setupTheme();
+  setupLanding();
+  pingServer();
+
+  setupAbout();
+  $('#home').addEventListener('click', () => reset(true));
+  $('#newdoc').addEventListener('click', () => reset());
+  $('#sel-all').addEventListener('click', () => selectAll(true));
+  $('#sel-none').addEventListener('click', () => selectAll(false));
+  $('#q').addEventListener('input', e => { S.query = e.target.value; applyFilter(); });
+  for (const b of $$('#views button')) b.addEventListener('click', () => setView(b.dataset.v));
+
+  $('#paper').addEventListener('click', e => {
+    const w = e.target.closest('.w');
+    if (w && S.phase === 'ready') { toggleWord(Number(w.dataset.i)); showTip(w); }
+  });
+  $('#paper').addEventListener('mouseover', e => {
+    const w = e.target.closest('.w');
+    if (w && S.phase === 'ready') showTip(w); else hideTip();
+  });
+  $('#paper').addEventListener('mouseleave', hideTip);
+  addEventListener('scroll', hideTip, { passive: true });
+
+  $('#dl-pdf').addEventListener('click', downloadPdf);
+  $('#dl-txt').addEventListener('click', async () => {
+    // Com servidor, o texto sai de FinalText, no formato exato do
+    // submission.txt; sem ele, da pré-visualização local.
+    let blob = new Blob([anonymizedText()], { type: 'text/plain;charset=utf-8' });
+    if (S.server.online) {
+      try {
+        blob = await (await api('/api/redact', { json: { doc_id: S.doc.docId, ids: censoredIds(), format: 'txt' } })).blob();
+      } catch (e) { return toast(e.message, 'error'); }
+    }
+    saveBlob(blob, `${baseName()}_anonimizado.txt`);
+    toast('Texto anonimizado descarregado.');
+  });
+  $('#dl-json').addEventListener('click', () => {
+    saveBlob(new Blob([JSON.stringify(reportJson(), null, 2) + '\n'], { type: 'application/json' }), `${baseName()}_relatorio.json`);
+    toast('Relatório descarregado.');
+  });
+}
+init();
+
+})();
+</script>
+<script src="i18n.js"></script>
+<script src="lupa.js"></script>
+<script src="intro.js"></script>
+<script src="detective.js"></script>
+</body>
+</html>

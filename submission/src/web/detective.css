@@ -1,0 +1,118 @@
+/* ==========================================================================
+   O detetive
+
+   Vive nos cantos inferiores da página inicial: entra pela lateral, vai
+   fazendo pequenos gestos com a lupa, sai e reaparece no canto oposto.
+   detective.js desenha-o e decide o que ele faz; aqui estão as poses, que
+   chegam em atributos data-* de .detective (e não em classes, para não
+   colidirem com as do resto da página).
+   ========================================================================== */
+
+.detective {
+  --det-coat: #2e2924;
+  --det-coat-2: #403931;     /* gola e manga */
+  --det-hat: #1e1a17;        /* chapéu, óculos e luva */
+  --det-rim: #8d8474;        /* aro dos óculos */
+  --det-edge: transparent;   /* contorno, só preciso sobre fundo escuro */
+  --tilt: 14deg;             /* inclinado para dentro da página */
+  --side: -1;                /* de que lateral entra: -1 esquerda, 1 direita */
+
+  position: absolute;        /* dentro de #landing: anda com a página */
+  bottom: 0;
+  left: 0;
+  z-index: 2;
+  width: clamp(170px, 28vw, 400px);
+  pointer-events: none;
+  color: var(--ink);         /* a lupa, da cor do texto */
+  /* Entra e sai pela lateral; em baixo, o casaco é cortado pelo ecrã. */
+  transform: translate(calc(var(--side) * 125%), 12%);
+  transition: transform 1.1s cubic-bezier(.5, 0, .7, .4);   /* a sair */
+}
+.detective[data-stage] { transition: transform .8s cubic-bezier(.3, 1.25, .4, 1); }   /* a entrar */
+/* No tema escuro a roupa clareia um pouco e ganha contorno, senão não se vê. */
+:root[data-theme="dark"] .detective {
+  --det-coat: #37312b;
+  --det-coat-2: #4a4239;
+  --det-hat: #564c41;
+  --det-edge: rgb(247 238 218 / .2);
+}
+
+.det-flip { transform: rotate(var(--tilt)); transform-origin: 50% 100%; }
+/* À direita fica espelhado: inclina-se para o outro lado e a lupa continua
+   do lado da página. */
+.detective[data-side="right"] { --side: 1; left: auto; right: 0; }
+.detective[data-side="right"] .det-flip { transform: scaleX(-1) rotate(var(--tilt)); }
+
+.detective[data-stage="peek"] { transform: translate(calc(var(--side) * 58%), 12%); }   /* só a lupa e meio chapéu */
+.detective[data-stage="up"] { transform: translate(calc(var(--side) * 6%), 12%); }
+
+.detective svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  animation: det-breathe 3.8s ease-in-out infinite;
+}
+@keyframes det-breathe {
+  50% { transform: translateY(-1.5%); }
+}
+
+.det-coat,
+.det-void,
+.det-collar,
+.det-crown,
+.det-brim { stroke: var(--det-edge); stroke-width: 1.5; }
+.det-coat { fill: var(--det-coat); }
+.det-collar { fill: var(--det-coat-2); }
+.det-sleeve { fill: none; stroke: var(--det-coat-2); stroke-width: 25; stroke-linecap: round; }
+.det-seam { fill: none; stroke: var(--det-coat-2); stroke-width: 2.5; }
+.det-void { fill: #000; }                          /* cara e pescoço: só preto */
+.det-button { fill: var(--det-coat-2); }
+.det-crown,
+.det-brim,
+.det-glove { fill: var(--det-hat); }
+/* Sobre o preto, os óculos são só o aro. */
+.det-glasses circle { fill: #000; stroke: var(--det-rim); stroke-width: 2.8; }
+.det-frame { fill: none; stroke: var(--det-rim); stroke-width: 2.8; stroke-linecap: round; }
+.det-pupil { fill: #f7eeda; }                      /* os olhos: dois pontos no escuro */
+.det-lupa { fill: currentColor; }
+.det-glass { fill: rgb(255 255 255 / .2); }
+
+/* ---------- Gestos ---------- */
+.det-blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: det-blink 4.6s infinite;
+}
+@keyframes det-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  96.5% { transform: scaleY(.08); }
+}
+
+.det-pupil { transition: transform .35s; }
+.detective[data-pose="look-a"] .det-pupil { transform: translateX(2.6px); }
+.detective[data-pose="look-b"] .det-pupil { transform: translateX(-2.6px); }
+
+.det-head { transform-origin: 100px 132px; transition: transform .5s; }
+.detective[data-pose="tilt"] .det-head { transform: rotate(-5deg); }
+
+.det-hat { transform-origin: 100px 62px; transition: transform .35s; }
+.detective[data-pose="tip"] .det-hat { transform: translateY(-6px) rotate(-8deg); }
+
+/* O braço descansa um pouco em baixo; "scan" leva a lupa ao olho, que se vê
+   maior através do vidro. */
+.det-arm {
+  transform-origin: 162px 204px;
+  transform: translate(5px, 12px) rotate(7deg);
+  transition: transform .7s cubic-bezier(.4, 0, .2, 1);
+}
+.detective[data-pose="scan"] .det-arm { transform: translate(-26px, -2px) rotate(-2deg); }
+.det-eye-r { transform-box: fill-box; transform-origin: center; transition: transform .3s; }
+.detective[data-pose="scan"] .det-eye-r { transform: scale(1.75); transition-delay: .45s; }
+
+.detective[data-pose="sweep"] .det-arm { animation: det-sweep 3.2s ease-in-out; }
+@keyframes det-sweep {
+  0%, 100% { transform: translate(5px, 12px) rotate(7deg); }
+  30% { transform: translate(-8px, -20px) rotate(-11deg); }
+  62% { transform: translate(10px, -10px) rotate(9deg); }
+}

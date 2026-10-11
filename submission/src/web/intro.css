@@ -1,0 +1,364 @@
+/* ==========================================================================
+   Ecrã de boas-vindas
+
+   Uma sala às escuras: o candeeiro cai do topo, acende e ilumina o texto, que
+   é escrito à máquina e depois censurado com "*". O cursor é uma lupa que
+   revela o que ficou escondido.
+
+   A animação está em intro.js; o texto, em index.html (#intro).
+   ========================================================================== */
+
+:root {
+  --type: "American Typewriter", "Courier Prime", "Courier New", ui-monospace, monospace;
+  --chalk: #f7eeda;   /* texto e lupa sobre o fundo escuro */
+  --hot: #ff6a3d;     /* os "*" */
+}
+
+#intro {
+  --rope: clamp(84px, 22vh, 260px);                    /* corda visível, em repouso */
+  --head-w: clamp(92px, 10vw, 136px);                  /* largura do abajur */
+  --head-h: calc(var(--head-w) * .632);                /* proporção do SVG (136 x 86) */
+  --bulb-y: calc(var(--rope) + var(--head-h) * .907);  /* boca do abajur, de onde sai a luz */
+  /* Vértice do cone de luz: fica dentro do abajur, para o cone sair com a
+     largura da boca (meia largura 0,456 x --head-w, meio ângulo de 39 graus). */
+  --cone-y: calc(var(--bulb-y) - var(--head-w) * .563);
+  --warm: 255 199 125;                                 /* cor da luz */
+  /* Scroll que a saída ocupa: o palco fica preso ao ecrã enquanto o texto é
+     apagado, a luz se apaga e o candeeiro sobe (intro.js, setupExit). */
+  --exit: 85vh;
+
+  position: relative;
+  flex: none;
+  height: calc(max(100vh, 540px) + var(--exit));
+  height: calc(max(100svh, 540px) + var(--exit));
+  color: var(--chalk);
+  -webkit-user-select: none;   /* arrastar a lupa não deve selecionar texto */
+  user-select: none;
+}
+body:not([data-phase="landing"]) #intro { display: none; }
+
+.intro-stage {
+  position: sticky;
+  top: 0;
+  isolation: isolate;
+  overflow: hidden;
+  height: 100vh;
+  height: 100svh;
+  min-height: 540px;
+  background: radial-gradient(120% 80% at 50% 0%, #181512 0%, #0c0b0a 62%);
+}
+/* No fim da saída a sala funde-se com o fundo da página, para a página
+   inicial entrar sem se notar a costura. */
+.intro-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: var(--bg);
+  opacity: var(--fade, 0);
+}
+
+/* Grão subtil, para o degradé escuro não fazer bandas. */
+.intro-stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: calc(.07 * (1 - var(--fade, 0)));   /* some com a sala, senão nota-se a costura */
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Só para leitores de ecrã: o texto animado é lido de uma vez. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- Candeeiro ----------
+   .lamp roda sobre o ponto onde a corda está presa (acima do ecrã).
+   intro.js anima --k (comprimento da corda; 1 = em repouso) e --a (ângulo). */
+.lamp {
+  --k: 0;   /* recolhido acima do ecrã até cair */
+  position: absolute;
+  left: 50%;
+  top: calc(var(--head-h) * -1);
+  z-index: 2;
+  width: 0;
+  transform-origin: 0 0;
+  transform: rotate(var(--a, 0deg));
+  will-change: transform;
+}
+#intro.down .lamp { --k: 1; }
+.rope {
+  position: absolute;
+  left: -1.5px;
+  top: 0;
+  width: 3px;
+  height: calc((var(--rope) + var(--head-h)) * var(--k));
+  border-radius: 2px;
+  background: repeating-linear-gradient(-52deg, #8d7d62 0 2px, #5f5444 2px 4.5px) bottom / 100% auto;
+}
+.lamp-head {
+  position: absolute;
+  left: calc(var(--head-w) / -2);
+  top: calc((var(--rope) + var(--head-h)) * var(--k) - 1px);
+  width: var(--head-w);
+  height: var(--head-h);
+  overflow: visible;
+}
+.lamp-socket { fill: #2c2824; stroke: rgb(247 238 218 / .16); }
+.lamp-shade { fill: url(#lamp-shade); stroke: rgb(247 238 218 / .2); }
+.lamp-shine { fill: none; stroke: rgb(255 255 255 / .1); stroke-width: 3; stroke-linecap: round; }
+.lamp-rim { fill: #14120f; stroke: rgb(247 238 218 / .16); }
+.lamp-on { opacity: 0; }   /* partes que só se veem com a luz acesa */
+
+/* ---------- Luz ---------- */
+.intro-light,
+.intro-bloom {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+.intro-light {
+  inset: 0;
+  z-index: 0;
+  background:
+    /* a zona iluminada, onde fica o texto */
+    radial-gradient(ellipse 46% 40% at 50% calc(var(--bulb-y) + 30vh), rgb(var(--warm) / .15), transparent 72%),
+    /* o cone que sai do abajur, virado para baixo */
+    conic-gradient(from 137deg at 50% var(--cone-y), transparent 0deg, rgb(var(--warm) / .16) 8deg, rgb(var(--warm) / .16) 78deg, transparent 86deg);
+  -webkit-mask-image: radial-gradient(circle at 50% var(--bulb-y), #000 0, rgb(0 0 0 / .6) 36vh, transparent 86vh);
+  mask-image: radial-gradient(circle at 50% var(--bulb-y), #000 0, rgb(0 0 0 / .6) 36vh, transparent 86vh);
+}
+.intro-bloom {
+  left: 50%;
+  top: var(--bulb-y);
+  z-index: 1;
+  width: calc(var(--head-w) * 2.6);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  /* vários degraus, para o halo se desfazer sem deixar um contorno */
+  background: radial-gradient(circle, rgb(255 240 205 / .5) 0, rgb(var(--warm) / .22) 16%, rgb(var(--warm) / .1) 32%, rgb(var(--warm) / .04) 50%, transparent 70%);
+}
+#intro.lit .intro-light,
+#intro.lit .intro-bloom,
+#intro.lit .lamp-on { opacity: calc(1 - var(--dim, 0)); }   /* --dim: saída */
+/* Ao acender, a lâmpada tremeluz antes de firmar. */
+#intro.flicker .intro-light,
+#intro.flicker .intro-bloom,
+#intro.flicker .lamp-on { animation: intro-flicker .52s linear; }
+@keyframes intro-flicker {
+  0% { opacity: 0; }
+  9% { opacity: 1; }
+  17% { opacity: .12; }
+  31% { opacity: .92; }
+  40% { opacity: .3; }
+  58%, 100% { opacity: 1; }
+}
+
+/* ---------- Texto escrito à máquina ---------- */
+.intro-copy {
+  /* A máscara recorta o que sai da caixa: a margem interior dá espaço ao
+     brilho do título. */
+  --pad: 64px;
+
+  position: absolute;
+  left: 50%;
+  top: calc(var(--rope) + var(--head-h) + clamp(34px, 8vh, 100px) - var(--pad));
+  z-index: 1;
+  width: min(100%, 1112px);
+  padding: var(--pad) 16px;
+  transform: translateX(-50%);
+  text-align: center;
+  font-family: var(--type);
+  opacity: 0;
+  transition: opacity .3s;
+  /* longe do candeeiro, o texto fica mais apagado */
+  -webkit-mask-image: radial-gradient(ellipse 72% 150% at 50% 0%, #000 48%, rgb(0 0 0 / .38) 100%);
+  mask-image: radial-gradient(ellipse 72% 150% at 50% 0%, #000 48%, rgb(0 0 0 / .38) 100%);
+}
+/* O texto só se vê com luz: ao apagar-se (--dim), escurece com ela. */
+#intro.lit .intro-copy { opacity: calc(1 - var(--dim, 0)); }
+.intro-title {
+  margin: 0;
+  /* 7,4vw em ecrãs largos; em telemóveis a letra acompanha a largura
+     (11,6vw), para um nome com uma dúzia de letras caber numa linha. */
+  font: 700 min(11.6vw, max(44px, 7.4vw), 104px)/1.06 var(--type);
+  text-shadow: 0 0 34px rgb(var(--warm) / .3);
+}
+.intro-line {
+  margin: clamp(10px, 2.2vh, 22px) 0 0;
+  font-size: clamp(16px, 1.9vw, 26px);
+  line-height: 1.65;
+  color: #e9dec8;
+}
+#intro mark { background: none; color: inherit; }
+
+.wd { display: inline-block; max-width: 100%; }
+.ch { display: inline-block; visibility: hidden; }
+.ch.on { visibility: visible; }
+#intro .gone { visibility: hidden !important; }   /* apagado com backspace na saída */
+.ch.star,
+.cz-star { color: var(--hot); }
+/* Uma palavra já censurada: encolhe até à largura de um só "*". intro.js
+   anima a largura do conteúdo, daí o content-box. */
+.cz.done {
+  box-sizing: content-box;
+  display: inline-block;
+  text-align: center;
+  transition: width .3s cubic-bezier(.3, .7, .2, 1);
+}
+#intro.ready .cz-star { animation: intro-star 2.6s ease-in-out infinite; }
+@keyframes intro-star {
+  50% { text-shadow: 0 0 14px rgb(255 106 61 / .95); }
+}
+/* Sem rato, a palavra revela-se com um toque: o alvo cresce sem mexer no
+   texto à volta (a margem negativa anula a margem interior). */
+@media (hover: none), (pointer: coarse) {
+  .cz.done { margin: -.5em -.45em; padding: .5em .45em; cursor: pointer; }
+}
+.cz.peek { color: var(--hot); }
+
+.caret {
+  display: inline-block;
+  position: relative;
+  width: 0;
+  height: 1em;
+}
+.caret::after {
+  content: "";
+  position: absolute;
+  /* o underscore dos terminais */
+  left: .05em;
+  bottom: -.06em;
+  width: .56em;
+  height: max(2px, .09em);
+  background: var(--hot);
+  animation: intro-blink .8s steps(1) infinite;
+}
+@keyframes intro-blink {
+  50% { opacity: 0; }
+}
+
+.intro-hint {
+  margin: clamp(14px, 3vh, 30px) 0 0;
+  font: 500 13.5px/1.5 var(--font);
+  letter-spacing: .02em;
+  color: rgb(247 238 218 / .62);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity .6s, transform .6s;
+}
+#intro.ready .intro-hint { opacity: calc(1 - var(--out, 0) * 5); transform: none; }
+
+.intro-cue {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(12px, 3.5vh, 30px);
+  z-index: 3;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: rgb(247 238 218 / .6);
+  font: 600 11.5px var(--font);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity .6s, color .2s;
+}
+#intro.lit .intro-cue { opacity: calc(1 - var(--out, 0) * 5); }
+.intro-cue:hover { color: var(--chalk); }
+.intro-cue svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  animation: intro-bob 1.8s ease-in-out infinite;
+}
+@keyframes intro-bob {
+  50% { transform: translateY(4px); }
+}
+
+/* Na saída é o scroll que manda: nada pode ficar a arrastar-se atrás dele. */
+#intro.leaving .intro-copy,
+#intro.leaving .intro-hint,
+#intro.leaving .intro-cue { transition: none; }
+
+/* Saltar a animação: tudo no estado final, sem transições. */
+#intro.instant,
+#intro.instant *,
+#intro.instant *::after {
+  animation: none !important;
+  transition: none !important;
+}
+
+/* ---------- Lupa (cursor) ----------
+   intro.js desenha o SVG e move .lens; o centro do vidro é a ponta do cursor. */
+#intro.has-lens,
+#intro.has-lens * { cursor: none; }
+.lens {
+  --r: clamp(62px, 6vw, 92px);   /* raio exterior do anel */
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 90;
+  width: calc(var(--r) * 2);
+  pointer-events: none;
+  color: var(--chalk);
+  opacity: 0;
+  transition: opacity .15s;
+  will-change: transform;
+}
+.lens.on { opacity: 1; }
+.lens svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  fill: currentColor;
+  filter: drop-shadow(0 10px 18px rgb(0 0 0 / .55));
+}
+.lens-glass {
+  position: absolute;
+  left: 50%;
+  top: var(--r);
+  width: calc(var(--r) * 1.12);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 32% 28%, rgb(255 255 255 / .14), rgb(255 255 255 / .03) 55%, transparent 70%);
+  -webkit-backdrop-filter: brightness(1.3);
+  backdrop-filter: brightness(1.3);
+  transition: background-color .14s;
+}
+/* Com um "*" debaixo do vidro, este fica opaco e mostra a palavra original. */
+.lens.decode .lens-glass { background-color: var(--chalk); }
+.lens-word {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font: 700 20px/1 var(--type);
+  white-space: nowrap;
+  color: #1a1814;
+  transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% + var(--dy, 0px))) scale(var(--s, 1));
+  opacity: 0;
+  transition: opacity .12s;
+}
+.lens.decode .lens-word { opacity: 1; }
